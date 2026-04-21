@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>顧客・アポ管理</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+      background: #f0f4f8;
+      min-height: 100vh;
+      color: #333;
+    }
+
+    /* ========== パスワード画面 ========== */
+    #passwordScreen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    .pw-logo {
+      font-size: 22px;
+      font-weight: 700;
+      color: #4a86e8;
+      margin-bottom: 8px;
+      letter-spacing: 0.5px;
+    }
+
+    .pw-sub {
+      font-size: 13px;
+      color: #999;
+      margin-bottom: 32px;
+    }
+
+    .pw-card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 32px 24px;
+      width: 100%;
+      max-width: 360px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+    }
+
+    /* ========== メインアプリ ========== */
+    #app { display: none; }
+
+    .header {
+      background: #4a86e8;
+      color: #fff;
+      padding: 14px 20px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 2px 8px rgba(74,134,232,0.3);
+    }
+
+    .header h1 { font-size: 17px; font-weight: 700; }
+
+    .btn-logout {
+      background: rgba(255,255,255,0.2);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.4);
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 16px 16px 100px;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 14px;
+      padding: 20px;
+      margin-bottom: 14px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+
+    .card-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #4a86e8;
+      margin-bottom: 16px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #e8f0fe;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .card-title::before {
+      content: '';
+      display: inline-block;
+      width: 4px;
+      height: 16px;
+      background: #4a86e8;
+      border-radius: 2px;
+    }
+
+    .form-group { margin-bottom: 14px; }
+    .form-group:last-child { margin-bottom: 0; }
+
+    label {
+      display: block;
+      font-size: 12px;
+      color: #888;
+      margin-bottom: 5px;
+      font-weight: 500;
+    }
+
+    .required { color: #e53e3e; margin-left: 3px; }
+
+    input[type="text"],
+    input[type="number"],
+    input[type="date"],
+    input[type="datetime-local"],
+    input[type="password"],
+    select,
+    textarea {
+      width: 100%;
+      padding: 11px 13px;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 16px;
+      font-family: inherit;
+      color: #333;
+      background: #fff;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: #4a86e8;
+      box-shadow: 0 0 0 3px rgba(74,134,232,0.12);
+    }
+
+    textarea {
+      min-height: 80px;
+      resize: vertical;
+      line-height: 1.5;
+    }
+
+    select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23888' d='M6 8L0 0h12z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+      padding-right: 36px;
+    }
+
+    .row-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    /* ========== ボタン ========== */
+    .btn-primary {
+      width: 100%;
+      padding: 15px;
+      background: #4a86e8;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+      letter-spacing: 0.5px;
+    }
+
+    .btn-primary:active { transform: scale(0.98); }
+    .btn-primary:disabled { background: #a0aec0; cursor: not-allowed; }
+
+    /* ========== フィードバック ========== */
+    .success-banner {
+      background: #ebf8f0;
+      color: #276749;
+      border: 1px solid #9ae6b4;
+      border-radius: 10px;
+      padding: 13px 16px;
+      text-align: center;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 14px;
+      display: none;
+    }
+
+    .error-text {
+      color: #e53e3e;
+      font-size: 12px;
+      margin-top: 5px;
+    }
+
+    /* ========== 固定送信エリア ========== */
+    .submit-area {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #fff;
+      padding: 14px 20px;
+      box-shadow: 0 -4px 16px rgba(0,0,0,0.08);
+      z-index: 50;
+    }
+
+    .submit-inner {
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    /* ========== ローディング ========== */
+    .loading-text {
+      color: #999;
+      font-size: 14px;
+      text-align: center;
+      padding: 8px 0;
+    }
+
+    /* ========== 顧客選択バッジ ========== */
+    .mode-badge {
+      display: inline-block;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 20px;
+      margin-left: 8px;
+      font-weight: 600;
+    }
+
+    .mode-new { background: #fef3c7; color: #92400e; }
+    .mode-edit { background: #dbeafe; color: #1e40af; }
+  </style>
+</head>
+<body>
+
+<!-- ========== パスワード画面 ========== -->
+<div id="passwordScreen">
+  <div class="pw-logo">顧客・アポ管理</div>
+  <div class="pw-sub">shinhogle@gmail.com</div>
+  <div class="pw-card">
+    <div class="form-group">
+      <label>パスワード</label>
+      <input type="password" id="passwordInput" placeholder="パスワードを入力" autocomplete="current-password">
+      <div class="error-text" id="passwordError"></div>
+    </div>
+    <button class="btn-primary" onclick="login()">ログイン</button>
+  </div>
+</div>
+
+<!-- ========== メインアプリ ========== -->
+<div id="app">
+  <div class="header">
+    <h1>顧客・アポ管理</h1>
+    <button class="btn-logout" onclick="logout()">ログアウト</button>
+  </div>
+
+  <div class="container">
+    <div class="success-banner" id="successBanner"></div>
+
+    <!-- 顧客選択 -->
+    <div class="card">
+      <div class="card-title">
+        顧客選択
+        <span class="mode-badge mode-new" id="modeBadge">新規</span>
+      </div>
+      <div class="form-group">
+        <label>顧客を選ぶ</label>
+        <div id="customerSelectWrap" class="loading-text">読み込み中...</div>
+      </div>
+    </div>
+
+    <!-- 顧客情報 -->
+    <div class="card">
+      <div class="card-title">顧客情報</div>
+
+      <div class="form-group">
+        <label>営業担当<span class="required">*</span></label>
+        <input type="text" id="f_営業担当" placeholder="例：橋沢">
+      </div>
+
+      <div class="row-2">
+        <div class="form-group">
+          <label>会社名・屋号</label>
+          <input type="text" id="f_会社名・屋号" placeholder="例：山田商事">
+        </div>
+        <div class="form-group">
+          <label>名前</label>
+          <input type="text" id="f_名前" placeholder="例：山田 太郎">
+        </div>
+      </div>
+
+      <div class="row-2">
+        <div class="form-group">
+          <label>年齢</label>
+          <input type="number" id="f_年齢" placeholder="例：35" min="0" max="120">
+        </div>
+        <div class="form-group">
+          <label>生年月日</label>
+          <input type="date" id="f_生年月日">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>住所・エリア</label>
+        <input type="text" id="f_住所・エリア" placeholder="例：東京都新宿区">
+      </div>
+
+      <div class="row-2">
+        <div class="form-group">
+          <label>職業</label>
+          <input type="text" id="f_職業" placeholder="例：会社員">
+        </div>
+        <div class="form-group">
+          <label>おみくじ</label>
+          <input type="text" id="f_おみくじ" placeholder="例：大吉">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>ニーズ</label>
+        <textarea id="f_ニーズ" placeholder="顧客のニーズや課題を記入"></textarea>
+      </div>
+
+      <div class="row-2">
+        <div class="form-group">
+          <label>趣味</label>
+          <input type="text" id="f_趣味" placeholder="例：ゴルフ">
+        </div>
+        <div class="form-group">
+          <label>MBTI</label>
+          <input type="text" id="f_MBTI" placeholder="例：INTJ">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>持ち家かどうか</label>
+        <select id="f_持ち家かどうか">
+          <option value="">選択してください</option>
+          <option value="持ち家">持ち家</option>
+          <option value="賃貸">賃貸</option>
+          <option value="その他">その他</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>備考</label>
+        <textarea id="f_備考" placeholder="その他メモ"></textarea>
+      </div>
+    </div>
+
+    <!-- アポ情報 -->
+    <div class="card">
+      <div class="card-title">アポ情報</div>
+
+      <div class="form-group">
+        <label>アポ日時</label>
+        <input type="datetime-local" id="f_アポ日時">
+      </div>
+
+      <div class="form-group">
+        <label>話した内容</label>
+        <textarea id="f_話した内容" placeholder="今回のアポで話した内容" style="min-height:100px"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label>着地</label>
+        <input type="text" id="f_着地" placeholder="例：興味あり・検討中">
+      </div>
+
+      <div class="form-group">
+        <label>次回アクション日時</label>
+        <input type="datetime-local" id="f_次回アクション日時">
+      </div>
+
+      <div class="form-group">
+        <label>次回アクション</label>
+        <input type="text" id="f_次回アクション" placeholder="例：フォロー電話">
+      </div>
+
+      <div class="form-group">
+        <label>特記事項</label>
+        <textarea id="f_特記事項" placeholder="特筆すべきことがあれば記入"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="submit-area">
+    <div class="submit-inner">
+      <button class="btn-primary" id="submitBtn" onclick="submitForm()">送信する</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ========== 設定 ==========
+  // GASをWebアプリとしてデプロイした後、URLをここに貼り付けてください
+  var GAS_URL = 'https://script.google.com/macros/s/AKfycbzEAx6bgmarXyeMluZirNaP22pcvXT-3x4YcotnzcRZg0l-vIoVdB9-L57VEKIN56ghjg/exec';
+  var PASSWORD = 'Market';
+
+  // ========== 認証 ==========
+  function login() {
+    var input = document.getElementById('passwordInput').value;
+    if (input === PASSWORD) {
+      sessionStorage.setItem('auth', '1');
+      document.getElementById('passwordScreen').style.display = 'none';
+      document.getElementById('app').style.display = 'block';
+      loadCustomers();
+    } else {
+      document.getElementById('passwordError').textContent = 'パスワードが違います';
+    }
+  }
+
+  function logout() {
+    sessionStorage.removeItem('auth');
+    location.reload();
+  }
+
+  document.getElementById('passwordInput').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') login();
+  });
+
+  if (sessionStorage.getItem('auth') === '1') {
+    document.getElementById('passwordScreen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    loadCustomers();
+  }
+
+  // ========== 顧客一覧読み込み ==========
+  var customers = [];
+  var currentCustomerId = null;
+
+  function loadCustomers() {
+    document.getElementById('customerSelectWrap').innerHTML = '<div class="loading-text">読み込み中...</div>';
+    fetch(GAS_URL + '?action=getCustomers')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        customers = data;
+        renderCustomerSelect();
+      })
+      .catch(function() {
+        document.getElementById('customerSelectWrap').innerHTML =
+          '<div class="error-text">読み込みに失敗しました。GAS URLを確認してください。</div>';
+      });
+  }
+
+  function renderCustomerSelect() {
+    var html = '<select id="customerSelect" onchange="onCustomerChange(this.value)" style="width:100%;padding:11px 36px 11px 13px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:16px;background:#fff;-webkit-appearance:none;appearance:none;background-image:url(\'data:image/svg+xml,%3Csvg xmlns=\\\'http://www.w3.org/2000/svg\\\' width=\\\'12\\\' height=\\\'8\\\' viewBox=\\\'0 0 12 8\\\'%3E%3Cpath fill=\\\'%23888\\\' d=\\\'M6 8L0 0h12z\\\'/%3E%3C/svg%3E\');background-repeat:no-repeat;background-position:right 14px center">';
+    html += '<option value="">-- 顧客を選択 または 新規追加 --</option>';
+    html += '<option value="new">＋ 新規追加</option>';
+    customers.forEach(function(c) {
+      html += '<option value="' + c.id + '">' + escapeHtml(c.label) + '</option>';
+    });
+    html += '</select>';
+    document.getElementById('customerSelectWrap').innerHTML = html;
+  }
+
+  function onCustomerChange(val) {
+    var badge = document.getElementById('modeBadge');
+    if (val === '' || val === 'new') {
+      currentCustomerId = null;
+      clearCustomerForm();
+      badge.textContent = '新規';
+      badge.className = 'mode-badge mode-new';
+      return;
+    }
+
+    currentCustomerId = Number(val);
+    badge.textContent = '編集';
+    badge.className = 'mode-badge mode-edit';
+
+    fetch(GAS_URL + '?action=getCustomer&id=' + val)
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data) fillCustomerForm(data);
+      })
+      .catch(function() {
+        alert('顧客データの取得に失敗しました');
+      });
+  }
+
+  function clearCustomerForm() {
+    ['営業担当','会社名・屋号','名前','年齢','生年月日','住所・エリア',
+     '職業','おみくじ','ニーズ','趣味','MBTI','持ち家かどうか','備考'].forEach(function(f) {
+      var el = document.getElementById('f_' + f);
+      if (el) el.value = '';
+    });
+    clearApoForm();
+  }
+
+  function clearApoForm() {
+    ['アポ日時','話した内容','着地','次回アクション日時','次回アクション','特記事項'].forEach(function(f) {
+      var el = document.getElementById('f_' + f);
+      if (el) el.value = '';
+    });
+  }
+
+  function fillCustomerForm(data) {
+    ['営業担当','会社名・屋号','名前','年齢','住所・エリア',
+     '職業','おみくじ','ニーズ','趣味','MBTI','持ち家かどうか','備考'].forEach(function(f) {
+      var el = document.getElementById('f_' + f);
+      if (el && data[f] !== undefined) el.value = data[f];
+    });
+
+    // 生年月日: "yyyy/MM/dd" → "yyyy-MM-dd"
+    var dob = data['生年月日'];
+    if (dob) {
+      var el = document.getElementById('f_生年月日');
+      if (el) el.value = String(dob).replace(/\//g, '-');
+    }
+
+    clearApoForm();
+  }
+
+  // ========== 送信 ==========
+  function submitForm() {
+    var btn = document.getElementById('submitBtn');
+
+    var staff = document.getElementById('f_営業担当').value.trim();
+    if (!staff) {
+      alert('営業担当を入力してください');
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = '送信中...';
+
+    function v(id) {
+      var el = document.getElementById('f_' + id);
+      return el ? el.value : '';
+    }
+
+    var payload = {
+      isNew: currentCustomerId === null,
+      id: currentCustomerId,
+      '営業担当': staff,
+      '会社名・屋号': v('会社名・屋号'),
+      '名前': v('名前'),
+      '年齢': v('年齢'),
+      '生年月日': v('生年月日'),
+      '住所・エリア': v('住所・エリア'),
+      '職業': v('職業'),
+      'おみくじ': v('おみくじ'),
+      'ニーズ': v('ニーズ'),
+      '趣味': v('趣味'),
+      'MBTI': v('MBTI'),
+      '持ち家かどうか': v('持ち家かどうか'),
+      '備考': v('備考'),
+      'アポ日時': v('アポ日時'),
+      '話した内容': v('話した内容'),
+      '着地': v('着地'),
+      '次回アクション日時': v('次回アクション日時'),
+      '次回アクション': v('次回アクション'),
+      '特記事項': v('特記事項')
+    };
+
+    fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'data=' + encodeURIComponent(JSON.stringify(payload))
+    })
+      .then(function(r) { return r.json(); })
+      .then(function(result) {
+        if (result.success) {
+          var msg = payload.isNew
+            ? '新規顧客を登録しました（ID: ' + result.id + '）'
+            : '顧客情報を更新しました';
+          showSuccess(msg);
+          loadCustomers();
+          clearCustomerForm();
+          currentCustomerId = null;
+          document.getElementById('modeBadge').textContent = '新規';
+          document.getElementById('modeBadge').className = 'mode-badge mode-new';
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+          alert('エラー: ' + (result.error || '不明なエラー'));
+        }
+      })
+      .catch(function() {
+        alert('送信に失敗しました。接続を確認してください。');
+      })
+      .finally(function() {
+        btn.disabled = false;
+        btn.textContent = '送信する';
+      });
+  }
+
+  function showSuccess(msg) {
+    var el = document.getElementById('successBanner');
+    el.textContent = '✓ ' + msg;
+    el.style.display = 'block';
+    setTimeout(function() { el.style.display = 'none'; }, 5000);
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+</script>
+</body>
+</html>
