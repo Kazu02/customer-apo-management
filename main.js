@@ -404,10 +404,10 @@ var MATCHING_SHEET_NAME   = '名寄せ';
 var AFFILI_SS_NAME        = '顧客管理_アフィリエイト';
 var AFFILI_BASE_COLS      = 3; // アフィリンク顧客管理の固定列（顧客名・電話番号・顧客ID）
 
-var INTEGRATED_HEADERS = [
+// 統合ビューの固定（プロフィール）列。案件列はアフィリンクの案件数だけ動的に挿入される。
+var INTEGRATED_PROFILE_HEADERS = [
   '顧客ID', '名前', '会社名・屋号', '営業担当', '年齢', '職業',
-  'おみくじ', 'ニーズ', '趣味', 'MBTI', '持ち家かどうか',
-  '案件一覧', 'アフィリンク顧客名', '状態'
+  'おみくじ', 'ニーズ', '趣味', 'MBTI', '持ち家かどうか'
 ];
 
 var MATCHING_HEADERS = [
@@ -463,11 +463,14 @@ function getAffiliCustomerSS_() {
   return null;
 }
 
-// アフィリンク顧客（営業マン別シート）を読み、名前ごとに案件を集約
+// アフィリンク顧客（営業マン別シート）を読み、名前ごとに案件ステータスを集約。
+// 戻り値: { customers: [{normName, rawName, sales, caseStatus:{案件名:状態}}], caseNames: [案件名...] }
 function readAffiliCustomers_() {
   var css = getAffiliCustomerSS_();
-  if (!css) return [];
+  if (!css) return { customers: [], caseNames: [] };
   var map = {};
+  var caseOrder = [];
+  var caseSeen = {};
   css.getSheets().forEach(function(sheet) {
     var lastRow = sheet.getLastRow();
     var lastCol = sheet.getLastColumn();
@@ -475,23 +478,27 @@ function readAffiliCustomers_() {
     var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(String);
     if (headers[0] !== '顧客名') return; // 営業マンシートのみ対象
     var caseNames = headers.slice(AFFILI_BASE_COLS);
+    caseNames.forEach(function(cn) {
+      if (cn && !caseSeen[cn]) { caseSeen[cn] = true; caseOrder.push(cn); }
+    });
     var salesName = sheet.getName();
     var rows = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
     rows.forEach(function(row) {
       var rawName = String(row[0] || '').trim();
       if (!rawName) return;
       var key = normName_(rawName);
-      if (!map[key]) map[key] = { rawName: rawName, sales: [], cases: [] };
+      if (!map[key]) map[key] = { rawName: rawName, sales: [], caseStatus: {} };
       if (map[key].sales.indexOf(salesName) === -1) map[key].sales.push(salesName);
       caseNames.forEach(function(cn, i) {
         var status = String(row[AFFILI_BASE_COLS + i] || '').trim();
-        if (status) map[key].cases.push(cn + ':' + status);
+        if (status) map[key].caseStatus[cn] = status;
       });
     });
   });
-  return Object.keys(map).map(function(k) {
-    return { normName: k, rawName: map[k].rawName, sales: map[k].sales.join('・'), cases: map[k].cases };
+  var customers = Object.keys(map).map(function(k) {
+    return { normName: k, rawName: map[k].rawName, sales: map[k].sales.join('・'), caseStatus: map[k].caseStatus };
   });
+  return { customers: customers, caseNames: caseOrder };
 }
 
 // フォーム顧客（顧客情報シート）を読む
@@ -532,12 +539,27 @@ function writeIntegratedSheet_(ss, name, headers, rows, headerColor) {
   return sheet;
 }
 
-// 統合ビューと名寄せシートを再構築（メニュー実行）
+// 案件セルをステータスで背景色分け（瞬時に判別できるように）
+function colorCaseCells_(sheet, startRow, startCol, statusMatrix) {
+  var colorOf = function(s) {
+    if (s === '完了')   return '#d9ead3'; // 緑＝終了
+    if (s === '申請済') return '#cfe2f3'; // 青＝申請済
+    if (s === '申請中') return '#fff2cc'; // 黄＝進行中
+    if (s === '不参加') return '#efefef'; // 灰＝対象外
+    return '#ffffff';                     // 空＝未着手
+  };
+  var bg = statusMatrix.map(function(r) { return r.map(colorOf); });
+  sheet.getRange(startRow, startCol, bg.length, bg[0].length).setBackgrounds(bg);
+}
+
+// 統合ビュー（案件を1案件＝1列で横展開）と名寄せシートを再構築（メニュー実行）
 // 名寄せの「紐づけ顧客ID（編集可）」を手で直すと、次回実行時にその紐づけが優先される。
 function rebuildIntegratedCustomers() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var formCustomers   = readFormCustomers_();
-  var affiliCustomers = readAffiliCustomers_();
+  var formCustomers = readFormCustomers_();
+  var affili        = readAffiliCustomers_();
+  var affiliCustomers = affili.customers;
+  var caseNames       = affili.caseNames;
   var existing        = loadMatchingRows_();
 
   var formById = {};
@@ -547,9 +569,12 @@ function rebuildIntegratedCustomers() {
     if (c.normName) formByNorm[c.normName] = c;
   });
 
+  // 名寄せ
   var matchingRows = [];
   var affiToFormId = {};
+  var affiByFormId = {};
   affiliCustomers.forEach(function(a) {
+    var caseCount = Object.keys(a.caseStatus).length;
     var autoId = formByNorm[a.normName] ? String(formByNorm[a.normName].id) : '';
     var prev   = existing[a.rawName];
     var linkedId = '', linkedName = '', state = '', candidate = '';
@@ -574,42 +599,55 @@ function rebuildIntegratedCustomers() {
       if (best && bestD <= 2) candidate = best.name + '（ID:' + best.id + '）';
     }
 
-    if (linkedId !== '') affiToFormId[a.normName] = String(linkedId);
-    matchingRows.push([a.rawName, a.sales, a.cases.length, linkedId, linkedName, state, candidate]);
+    if (linkedId !== '') {
+      affiToFormId[a.normName] = String(linkedId);
+      if (!affiByFormId[String(linkedId)]) affiByFormId[String(linkedId)] = a;
+    }
+    matchingRows.push([a.rawName, a.sales, caseCount, linkedId, linkedName, state, candidate]);
   });
 
-  // formId -> 案件一覧 / 紐づくアフィリンク名
-  var casesByFormId = {};
-  var affiNameByFormId = {};
-  affiliCustomers.forEach(function(a) {
-    var fid = affiToFormId[a.normName];
-    if (!fid) return;
-    if (!casesByFormId[fid]) casesByFormId[fid] = [];
-    casesByFormId[fid] = casesByFormId[fid].concat(a.cases);
-    if (!affiNameByFormId[fid]) affiNameByFormId[fid] = a.rawName;
-  });
+  // 統合ビュー: 案件を1案件＝1列で横展開
+  var headers = INTEGRATED_PROFILE_HEADERS.concat(caseNames).concat(['アフィリンク顧客名', '状態']);
+  var caseCells = function(caseStatus) {
+    return caseNames.map(function(cn) { return caseStatus[cn] || ''; });
+  };
 
-  // 統合ビュー: フォーム顧客全件
   var integratedRows = [];
+  var caseMatrix     = []; // 案件列のみ（色付け用）
+
+  // フォーム顧客全件
   formCustomers.forEach(function(c) {
-    var caseList = casesByFormId[String(c.id)] || [];
-    integratedRows.push([
-      c.id, c.raw['名前'], c.raw['会社名・屋号'], c.raw['営業担当'], c.raw['年齢'], c.raw['職業'],
-      c.raw['おみくじ'], c.raw['ニーズ'], c.raw['趣味'], c.raw['MBTI'], c.raw['持ち家かどうか'],
-      caseList.join('、'), affiNameByFormId[String(c.id)] || '', caseList.length ? '統合済' : 'フォームのみ'
-    ]);
+    var a  = affiByFormId[String(c.id)];
+    var cs = a ? a.caseStatus : {};
+    var cells = caseCells(cs);
+    caseMatrix.push(cells);
+    integratedRows.push(
+      [c.id, c.raw['名前'], c.raw['会社名・屋号'], c.raw['営業担当'], c.raw['年齢'], c.raw['職業'],
+       c.raw['おみくじ'], c.raw['ニーズ'], c.raw['趣味'], c.raw['MBTI'], c.raw['持ち家かどうか']]
+      .concat(cells)
+      .concat([a ? a.rawName : '', (a && Object.keys(a.caseStatus).length) ? '統合済' : 'フォームのみ'])
+    );
   });
   // アフィリンクのみ（フォーム未登録 / 未紐づけ）
   affiliCustomers.forEach(function(a) {
     if (affiToFormId[a.normName]) return;
-    integratedRows.push([
-      '', a.rawName, '', a.sales, '', '', '', '', '', '', '',
-      a.cases.join('、'), a.rawName, 'アフィリンクのみ'
-    ]);
+    var cells = caseCells(a.caseStatus);
+    caseMatrix.push(cells);
+    integratedRows.push(
+      ['', a.rawName, '', a.sales, '', '', '', '', '', '', '']
+      .concat(cells)
+      .concat([a.rawName, 'アフィリンクのみ'])
+    );
   });
 
   writeIntegratedSheet_(ss, MATCHING_SHEET_NAME, MATCHING_HEADERS, matchingRows, '#7c3aed');
-  writeIntegratedSheet_(ss, INTEGRATED_SHEET_NAME, INTEGRATED_HEADERS, integratedRows, '#4a86e8');
+  var intSheet = writeIntegratedSheet_(ss, INTEGRATED_SHEET_NAME, headers, integratedRows, '#4a86e8');
 
-  ss.toast('統合 ' + integratedRows.length + '件 / 名寄せ ' + matchingRows.length + '件を更新', '統合顧客管理', 5);
+  // 案件セルをステータスで色分け＋名前列を固定（横スクロールでも顧客が分かるように）
+  if (caseNames.length && caseMatrix.length) {
+    colorCaseCells_(intSheet, 2, INTEGRATED_PROFILE_HEADERS.length + 1, caseMatrix);
+  }
+  intSheet.setFrozenColumns(2);
+
+  ss.toast('統合 ' + integratedRows.length + '件 / 案件 ' + caseNames.length + '列 / 名寄せ ' + matchingRows.length + '件', '統合顧客管理', 5);
 }
