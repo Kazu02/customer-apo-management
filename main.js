@@ -1,0 +1,615 @@
+// ===== 設定 =====
+var CUSTOMER_SHEET_NAME = '顧客情報';
+var APO_SHEET_NAME = 'アポ報告';
+var LINE_PUSH_API_URL = 'https://api.line.me/v2/bot/message/push';
+
+var CUSTOMER_HEADERS = [
+  'ID', 'タイムスタンプ', '営業担当', '会社名・屋号', '名前',
+  '年齢', '住所・エリア', '職業', 'おみくじ', 'ニーズ',
+  '生年月日', '趣味', 'MBTI', '持ち家かどうか', '備考'
+];
+
+var APO_HEADERS = [
+  'タイムスタンプ', '営業担当', 'ID-会社名-名前', 'アポ日時',
+  '話した内容', '着地', '次回アクション日時', '次回アクション', '特記事項', '自己採点'
+];
+
+// ===== Web App エンドポイント =====
+
+function doGet(e) {
+  var action = e.parameter.action || '';
+  var result;
+
+  if (action === 'getCustomers') {
+    result = getCustomerListData();
+  } else if (action === 'getCustomer') {
+    result = getCustomerData(Number(e.parameter.id));
+  } else {
+    result = { error: 'unknown action' };
+  }
+
+  return ContentService
+    .createTextOutput(JSON.stringify(result))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
+  var result;
+  try {
+    var data = JSON.parse(e.parameter.data);
+    data['タイムスタンプ'] = new Date();
+
+    if (data.isNew) {
+      var newId = registerCustomer(data);
+      data['ID-会社名-名前'] = newId + ' - ' + (data['会社名・屋号'] || '') + ' - ' + (data['名前'] || '');
+      registerApo(data);
+      result = { success: true, id: newId };
+      try {
+        notifyApoGroup(buildCustomerMessage(data, newId));
+        notifyApoGroup(buildApoMessage(data, true));
+      } catch (lineErr) { Logger.log('LINE通知エラー: ' + lineErr); }
+    } else {
+      updateCustomerById(data);
+      data['ID-会社名-名前'] = data.id + ' - ' + (data['会社名・屋号'] || '') + ' - ' + (data['名前'] || '');
+      registerApo(data);
+      result = { success: true };
+      try {
+        notifyApoGroup(buildApoMessage(data, false));
+      } catch (lineErr) { Logger.log('LINE通知エラー: ' + lineErr); }
+    }
+  } catch (err) {
+    result = { success: false, error: err.message };
+  }
+
+  return ContentService
+    .createTextOutput(JSON.stringify(result))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// ===== 顧客一覧をドロップダウン用に返す =====
+function getCustomerListData() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(CUSTOMER_SHEET_NAME);
+  if (!sheet || sheet.getLastRow() < 2) return [];
+
+  var data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 5).getValues();
+  return data
+    .filter(function(row) { return row[0] !== ''; })
+    .map(function(row) {
+      return { id: row[0], label: row[0] + ' - ' + row[3] + ' - ' + row[4] };
+    });
+}
+
+// ===== 特定顧客のデータをIDで返す =====
+function getCustomerData(id) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(CUSTOMER_SHEET_NAME);
+  if (!sheet || sheet.getLastRow() < 2) return null;
+
+  var data = sheet.getRange(2, 1, sheet.getLastRow() - 1, CUSTOMER_HEADERS.length).getValues();
+  for (var i = 0; i < data.length; i++) {
+    if (data[i][0] === id) {
+      var obj = {};
+      CUSTOMER_HEADERS.forEach(function(h, idx) {
+        var val = data[i][idx];
+        if (val instanceof Date) {
+          obj[h] = Utilities.formatDate(val, 'Asia/Tokyo', 'yyyy/MM/dd');
+        } else {
+          obj[h] = val;
+        }
+      });
+      return obj;
+    }
+  }
+  return null;
+}
+
+// ===== 顧客情報シートに書き込む（新規） =====
+function registerCustomer(v) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = getOrCreateSheet(ss, CUSTOMER_SHEET_NAME, CUSTOMER_HEADERS);
+
+  var newId = sheet.getLastRow();
+  var row = [
+    newId,
+    v['タイムスタンプ'] || new Date(),
+    v['営業担当'] || '',
+    v['会社名・屋号'] || '',
+    v['名前'] || '',
+    v['年齢'] || '',
+    v['住所・エリア'] || '',
+    v['職業'] || '',
+    v['おみくじ'] || '',
+    v['ニーズ'] || '',
+    v['生年月日'] || '',
+    v['趣味'] || '',
+    v['MBTI'] || '',
+    v['持ち家かどうか'] || '',
+    v['備考'] || ''
+  ];
+
+  sheet.appendRow(row);
+  return newId;
+}
+
+// ===== 顧客情報を上書き更新する =====
+function updateCustomerById(data) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(CUSTOMER_SHEET_NAME);
+  if (!sheet || sheet.getLastRow() < 2) return;
+
+  var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, CUSTOMER_HEADERS.length).getValues();
+  for (var i = 0; i < rows.length; i++) {
+    if (rows[i][0] === data.id) {
+      var rowIndex = i + 2;
+      var originalTimestamp = rows[i][1];
+      var row = [
+        data.id,
+        originalTimestamp,
+        data['営業担当'] || '',
+        data['会社名・屋号'] || '',
+        data['名前'] || '',
+        data['年齢'] || '',
+        data['住所・エリア'] || '',
+        data['職業'] || '',
+        data['おみくじ'] || '',
+        data['ニーズ'] || '',
+        data['生年月日'] || '',
+        data['趣味'] || '',
+        data['MBTI'] || '',
+        data['持ち家かどうか'] || '',
+        data['備考'] || ''
+      ];
+      sheet.getRange(rowIndex, 1, 1, row.length).setValues([row]);
+      return;
+    }
+  }
+}
+
+// ===== アポ報告シートに書き込む =====
+function registerApo(v) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = getOrCreateSheet(ss, APO_SHEET_NAME, APO_HEADERS);
+  ensureHeaders(sheet, APO_HEADERS);
+
+  var row = [
+    v['タイムスタンプ'] || new Date(),
+    v['営業担当'] || '',
+    v['ID-会社名-名前'] || '',
+    v['アポ日時'] || '',
+    v['話した内容'] || '',
+    v['着地'] || '',
+    v['次回アクション日時'] || '',
+    v['次回アクション'] || '',
+    v['特記事項'] || '',
+    v['自己採点'] || ''
+  ];
+
+  sheet.appendRow(row);
+}
+
+// ===== 初回セットアップ（一度だけ手動実行） =====
+function setup() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  getOrCreateSheet(ss, CUSTOMER_SHEET_NAME, CUSTOMER_HEADERS);
+  getOrCreateSheet(ss, APO_SHEET_NAME, APO_HEADERS);
+  Logger.log('セットアップ完了');
+}
+
+// ===== テスト用 =====
+function testCustomer() {
+  var v = {
+    'タイムスタンプ': new Date(),
+    '営業担当': '橋沢',
+    '会社名・屋号': 'テスト株式会社',
+    '名前': 'テスト太郎',
+    '年齢': '30',
+    '住所・エリア': '東京',
+    '職業': '会社員',
+    'おみくじ': '大吉',
+    'ニーズ': 'テスト',
+    '生年月日': '1994/01/01',
+    '趣味': 'テスト',
+    'MBTI': 'INTJ',
+    '持ち家かどうか': '賃貸',
+    '備考': 'テストデータ',
+    'アポ日時': '2026/04/21 10:00',
+    '話した内容': '初回面談',
+    '着地': '興味あり',
+    '次回アクション日時': '2026/04/28 10:00',
+    '次回アクション': 'フォロー電話',
+    '特記事項': ''
+  };
+  var newId = registerCustomer(v);
+  v['ID-会社名-名前'] = newId + ' - ' + v['会社名・屋号'] + ' - ' + v['名前'];
+  registerApo(v);
+  Logger.log('顧客登録＋アポ報告テスト完了 ID=' + newId);
+}
+
+// ===== LINE通知 =====
+
+function notifyApoGroup(text) {
+  var props   = PropertiesService.getScriptProperties();
+  var token   = props.getProperty('LINE_CHANNEL_TOKEN');
+  var groupId = props.getProperty('APO_LINE_GROUP_ID');
+  if (!token || !groupId) return;
+  var msg = text.length > 4990 ? text.substring(0, 4990) + '...' : text;
+  UrlFetchApp.fetch(LINE_PUSH_API_URL, {
+    method: 'post',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + token
+    },
+    payload: JSON.stringify({ to: groupId, messages: [{ type: 'text', text: msg }] }),
+    muteHttpExceptions: true
+  });
+}
+
+function buildCustomerMessage(data, newId) {
+  var lines = ['【新規顧客登録】ID: ' + newId];
+  var fields = ['営業担当','会社名・屋号','名前','年齢','住所・エリア','職業',
+                'おみくじ','ニーズ','生年月日','趣味','MBTI','持ち家かどうか','備考'];
+  fields.forEach(function(f) {
+    var v = data[f];
+    if (v !== undefined && v !== '') lines.push(f + ': ' + v);
+  });
+  return lines.join('\n');
+}
+
+function buildApoMessage(data, isNew) {
+  var header = isNew ? '【新規顧客アポ報告】' : '【アポ報告】';
+  var lines = [
+    header,
+    '営業担当: ' + (data['営業担当'] || ''),
+    '顧客: '    + (data['会社名・屋号'] || '') + ' ' + (data['名前'] || '')
+  ];
+  var fields = ['アポ日時','話した内容','着地','自己採点','次回アクション日時','次回アクション','特記事項'];
+  fields.forEach(function(f) {
+    var v = data[f];
+    if (v !== undefined && v !== '') lines.push(f + ': ' + v);
+  });
+  return lines.join('\n');
+}
+
+// ===== 日次集計（毎朝9時トリガーで実行） =====
+
+function sendDailySummary() {
+  var ss        = SpreadsheetApp.getActiveSpreadsheet();
+  var yesterday = getYesterdayStr();
+
+  var customerCounts = countByStaff(ss, CUSTOMER_SHEET_NAME, 1, 2, yesterday); // タイムスタンプ=col1, 営業担当=col2
+  var apoCounts      = countByStaff(ss, APO_SHEET_NAME,      0, 1, yesterday); // タイムスタンプ=col0, 営業担当=col1
+
+  var customerTotal = sumValues(customerCounts);
+  var apoTotal      = sumValues(apoCounts);
+
+  var lines = ['【前日集計】' + yesterday, '━━━━━━━━━━━━━'];
+
+  lines.push('\n■顧客登録（' + customerTotal + '件）');
+  if (customerTotal === 0) {
+    lines.push('なし');
+  } else {
+    Object.keys(customerCounts).forEach(function(s) {
+      lines.push('・' + s + ': ' + customerCounts[s] + '件');
+    });
+  }
+
+  lines.push('\n■アポ報告（' + apoTotal + '件）');
+  if (apoTotal === 0) {
+    lines.push('なし');
+  } else {
+    Object.keys(apoCounts).forEach(function(s) {
+      lines.push('・' + s + ': ' + apoCounts[s] + '件');
+    });
+  }
+
+  notifyApoGroup(lines.join('\n'));
+}
+
+function countByStaff(ss, sheetName, tsColIdx, staffColIdx, dateStr) {
+  var counts = {};
+  var sheet = ss.getSheetByName(sheetName);
+  if (!sheet || sheet.getLastRow() < 2) return counts;
+  var lastRow  = sheet.getLastRow();
+  var lastCol  = Math.max(tsColIdx, staffColIdx) + 1;
+  var data     = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+  data.forEach(function(row) {
+    if (!row[tsColIdx]) return;
+    if (toDateStr(row[tsColIdx]) !== dateStr) return;
+    var staff = String(row[staffColIdx] || '未記入');
+    counts[staff] = (counts[staff] || 0) + 1;
+  });
+  return counts;
+}
+
+function sumValues(obj) {
+  return Object.keys(obj).reduce(function(sum, k) { return sum + obj[k]; }, 0);
+}
+
+function getYesterdayStr() {
+  var jstNow       = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
+  var jstYesterday = new Date(jstNow.getTime() - 24 * 60 * 60 * 1000);
+  var p = function(n) { return String(n).padStart(2, '0'); };
+  return jstYesterday.getUTCFullYear() + '/' +
+         p(jstYesterday.getUTCMonth() + 1) + '/' +
+         p(jstYesterday.getUTCDate());
+}
+
+function toDateStr(value) {
+  if (!value) return '';
+  if (value instanceof Date) {
+    var jst = new Date(value.getTime() + 9 * 60 * 60 * 1000);
+    var p   = function(n) { return String(n).padStart(2, '0'); };
+    return jst.getUTCFullYear() + '/' + p(jst.getUTCMonth() + 1) + '/' + p(jst.getUTCDate());
+  }
+  return String(value).substring(0, 10);
+}
+
+// ===== セットアップ（初回に手動実行） =====
+
+function setupApoLineConfig() {
+  // GASエディタのスクリプトプロパティに設定済みであること
+  // LINE_CHANNEL_TOKEN: アフィリンクと同じLINEチャンネルアクセストークン
+  // APO_LINE_GROUP_ID:  アポ管理グループのグループID
+  Logger.log('LINE_CHANNEL_TOKEN: ' + (PropertiesService.getScriptProperties().getProperty('LINE_CHANNEL_TOKEN') ? '設定済み' : '未設定'));
+  Logger.log('APO_LINE_GROUP_ID: '  + (PropertiesService.getScriptProperties().getProperty('APO_LINE_GROUP_ID')  ? '設定済み' : '未設定'));
+}
+
+function setupDailySummaryTrigger() {
+  ScriptApp.getProjectTriggers().forEach(function(t) {
+    if (t.getHandlerFunction() === 'sendDailySummary') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('sendDailySummary')
+    .timeBased()
+    .everyDays(1)
+    .atHour(9)
+    .inTimezone('Asia/Tokyo')
+    .create();
+  Logger.log('毎朝9時トリガーを設置しました');
+}
+
+// ===== ユーティリティ =====
+// 既存シートにヘッダー不足があれば補う（新項目追加時に既存シートへ反映）
+function ensureHeaders(sheet, headers) {
+  var lastCol = sheet.getLastColumn();
+  var current = lastCol > 0 ? sheet.getRange(1, 1, 1, lastCol).getValues()[0] : [];
+  if (current.length < headers.length) {
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    sheet.getRange(1, 1, 1, headers.length)
+      .setFontWeight('bold').setBackground('#4a86e8').setFontColor('#ffffff');
+    sheet.setFrozenRows(1);
+  }
+}
+
+function getOrCreateSheet(ss, name, headers) {
+  var sheet = ss.getSheetByName(name);
+  if (!sheet) {
+    sheet = ss.insertSheet(name);
+    sheet.appendRow(headers);
+    sheet.getRange(1, 1, 1, headers.length)
+      .setFontWeight('bold')
+      .setBackground('#4a86e8')
+      .setFontColor('#ffffff');
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+// ================================================================
+// ===== アフィリンク顧客管理との統合（名前で名寄せ） =====
+// ================================================================
+
+var INTEGRATED_SHEET_NAME = '統合顧客管理';
+var MATCHING_SHEET_NAME   = '名寄せ';
+var AFFILI_SS_NAME        = '顧客管理_アフィリエイト';
+var AFFILI_BASE_COLS      = 3; // アフィリンク顧客管理の固定列（顧客名・電話番号・顧客ID）
+
+var INTEGRATED_HEADERS = [
+  '顧客ID', '名前', '会社名・屋号', '営業担当', '年齢', '職業',
+  'おみくじ', 'ニーズ', '趣味', 'MBTI', '持ち家かどうか',
+  '案件一覧', 'アフィリンク顧客名', '状態'
+];
+
+var MATCHING_HEADERS = [
+  'アフィリンク顧客名', 'アフィリンク営業担当', '案件数',
+  '紐づけ顧客ID（編集可）', '紐づけ名前', '状態', '候補（近い名前）'
+];
+
+// バインドされたスプレッドシートを開いた時のメニュー
+function onOpen() {
+  SpreadsheetApp.getUi().createMenu('顧客統合')
+    .addItem('統合顧客管理を更新（名寄せ）', 'rebuildIntegratedCustomers')
+    .addToUi();
+}
+
+// 名前正規化（空白除去＋小文字）
+function normName_(name) {
+  return String(name || '').replace(/[\s　]+/g, '').toLowerCase();
+}
+
+// レーベンシュタイン距離（候補提案用）
+function lev_(a, b) {
+  a = String(a); b = String(b);
+  var m = a.length, n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  var dp = [];
+  for (var i = 0; i <= m; i++) dp[i] = [i];
+  for (var j = 1; j <= n; j++) dp[0][j] = j;
+  for (var x = 1; x <= m; x++) {
+    for (var y = 1; y <= n; y++) {
+      dp[x][y] = a.charAt(x - 1) === b.charAt(y - 1)
+        ? dp[x - 1][y - 1]
+        : 1 + Math.min(dp[x - 1][y], dp[x][y - 1], dp[x - 1][y - 1]);
+    }
+  }
+  return dp[m][n];
+}
+
+// アフィリンク顧客管理SSを取得（Drive名で検索しIDをキャッシュ）
+function getAffiliCustomerSS_() {
+  var props = PropertiesService.getScriptProperties();
+  var id = props.getProperty('AFFILI_CUSTOMER_SS_ID');
+  if (id) {
+    try { return SpreadsheetApp.openById(id); }
+    catch (e) { props.deleteProperty('AFFILI_CUSTOMER_SS_ID'); }
+  }
+  var files = DriveApp.getFilesByName(AFFILI_SS_NAME);
+  if (files.hasNext()) {
+    var file = files.next();
+    props.setProperty('AFFILI_CUSTOMER_SS_ID', file.getId());
+    return SpreadsheetApp.openById(file.getId());
+  }
+  return null;
+}
+
+// アフィリンク顧客（営業マン別シート）を読み、名前ごとに案件を集約
+function readAffiliCustomers_() {
+  var css = getAffiliCustomerSS_();
+  if (!css) return [];
+  var map = {};
+  css.getSheets().forEach(function(sheet) {
+    var lastRow = sheet.getLastRow();
+    var lastCol = sheet.getLastColumn();
+    if (lastRow < 2 || lastCol < 1) return;
+    var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(String);
+    if (headers[0] !== '顧客名') return; // 営業マンシートのみ対象
+    var caseNames = headers.slice(AFFILI_BASE_COLS);
+    var salesName = sheet.getName();
+    var rows = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+    rows.forEach(function(row) {
+      var rawName = String(row[0] || '').trim();
+      if (!rawName) return;
+      var key = normName_(rawName);
+      if (!map[key]) map[key] = { rawName: rawName, sales: [], cases: [] };
+      if (map[key].sales.indexOf(salesName) === -1) map[key].sales.push(salesName);
+      caseNames.forEach(function(cn, i) {
+        var status = String(row[AFFILI_BASE_COLS + i] || '').trim();
+        if (status) map[key].cases.push(cn + ':' + status);
+      });
+    });
+  });
+  return Object.keys(map).map(function(k) {
+    return { normName: k, rawName: map[k].rawName, sales: map[k].sales.join('・'), cases: map[k].cases };
+  });
+}
+
+// フォーム顧客（顧客情報シート）を読む
+function readFormCustomers_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(CUSTOMER_SHEET_NAME);
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  var data = sheet.getRange(2, 1, sheet.getLastRow() - 1, CUSTOMER_HEADERS.length).getValues();
+  return data.filter(function(r) { return r[0] !== ''; }).map(function(r) {
+    var obj = {};
+    CUSTOMER_HEADERS.forEach(function(h, i) { obj[h] = r[i]; });
+    return { id: obj['ID'], name: String(obj['名前'] || '').trim(), normName: normName_(obj['名前']), raw: obj };
+  });
+}
+
+// 名寄せシートの既存行（手動編集を保持するため）を読む
+function loadMatchingRows_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(MATCHING_SHEET_NAME);
+  var existing = {};
+  if (!sheet || sheet.getLastRow() < 2) return existing;
+  var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, MATCHING_HEADERS.length).getValues();
+  rows.forEach(function(r) {
+    var affName = String(r[0] || '').trim();
+    if (affName) existing[affName] = { linkId: r[3], state: String(r[5] || '') };
+  });
+  return existing;
+}
+
+// シートを丸ごと書き換え（ヘッダー書式付き）
+function writeIntegratedSheet_(ss, name, headers, rows, headerColor) {
+  var sheet = ss.getSheetByName(name) || ss.insertSheet(name);
+  sheet.clear();
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers])
+    .setFontWeight('bold').setBackground(headerColor).setFontColor('#ffffff');
+  if (rows.length) sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
+  sheet.setFrozenRows(1);
+  return sheet;
+}
+
+// 統合ビューと名寄せシートを再構築（メニュー実行）
+// 名寄せの「紐づけ顧客ID（編集可）」を手で直すと、次回実行時にその紐づけが優先される。
+function rebuildIntegratedCustomers() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var formCustomers   = readFormCustomers_();
+  var affiliCustomers = readAffiliCustomers_();
+  var existing        = loadMatchingRows_();
+
+  var formById = {};
+  var formByNorm = {};
+  formCustomers.forEach(function(c) {
+    formById[String(c.id)] = c;
+    if (c.normName) formByNorm[c.normName] = c;
+  });
+
+  var matchingRows = [];
+  var affiToFormId = {};
+  affiliCustomers.forEach(function(a) {
+    var autoId = formByNorm[a.normName] ? String(formByNorm[a.normName].id) : '';
+    var prev   = existing[a.rawName];
+    var linkedId = '', linkedName = '', state = '', candidate = '';
+
+    if (prev && prev.linkId !== '' && prev.linkId !== null && prev.linkId !== undefined
+        && formById[String(prev.linkId)]) {
+      linkedId   = prev.linkId;
+      linkedName = formById[String(linkedId)].name;
+      state      = (String(linkedId) === autoId && autoId !== '') ? '自動一致' : '手動';
+    } else if (autoId) {
+      linkedId   = autoId;
+      linkedName = formByNorm[a.normName].name;
+      state      = '自動一致';
+    } else {
+      state = '未一致';
+      var best = null, bestD = 99;
+      formCustomers.forEach(function(c) {
+        if (!c.normName) return;
+        var d = lev_(a.normName, c.normName);
+        if (d < bestD) { bestD = d; best = c; }
+      });
+      if (best && bestD <= 2) candidate = best.name + '（ID:' + best.id + '）';
+    }
+
+    if (linkedId !== '') affiToFormId[a.normName] = String(linkedId);
+    matchingRows.push([a.rawName, a.sales, a.cases.length, linkedId, linkedName, state, candidate]);
+  });
+
+  // formId -> 案件一覧 / 紐づくアフィリンク名
+  var casesByFormId = {};
+  var affiNameByFormId = {};
+  affiliCustomers.forEach(function(a) {
+    var fid = affiToFormId[a.normName];
+    if (!fid) return;
+    if (!casesByFormId[fid]) casesByFormId[fid] = [];
+    casesByFormId[fid] = casesByFormId[fid].concat(a.cases);
+    if (!affiNameByFormId[fid]) affiNameByFormId[fid] = a.rawName;
+  });
+
+  // 統合ビュー: フォーム顧客全件
+  var integratedRows = [];
+  formCustomers.forEach(function(c) {
+    var caseList = casesByFormId[String(c.id)] || [];
+    integratedRows.push([
+      c.id, c.raw['名前'], c.raw['会社名・屋号'], c.raw['営業担当'], c.raw['年齢'], c.raw['職業'],
+      c.raw['おみくじ'], c.raw['ニーズ'], c.raw['趣味'], c.raw['MBTI'], c.raw['持ち家かどうか'],
+      caseList.join('、'), affiNameByFormId[String(c.id)] || '', caseList.length ? '統合済' : 'フォームのみ'
+    ]);
+  });
+  // アフィリンクのみ（フォーム未登録 / 未紐づけ）
+  affiliCustomers.forEach(function(a) {
+    if (affiToFormId[a.normName]) return;
+    integratedRows.push([
+      '', a.rawName, '', a.sales, '', '', '', '', '', '', '',
+      a.cases.join('、'), a.rawName, 'アフィリンクのみ'
+    ]);
+  });
+
+  writeIntegratedSheet_(ss, MATCHING_SHEET_NAME, MATCHING_HEADERS, matchingRows, '#7c3aed');
+  writeIntegratedSheet_(ss, INTEGRATED_SHEET_NAME, INTEGRATED_HEADERS, integratedRows, '#4a86e8');
+
+  ss.toast('統合 ' + integratedRows.length + '件 / 名寄せ ' + matchingRows.length + '件を更新', '統合顧客管理', 5);
+}
