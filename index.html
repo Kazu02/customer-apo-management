@@ -326,7 +326,14 @@
         </div>
         <div class="form-group">
           <label>おみくじ</label>
-          <input type="text" id="f_おみくじ" placeholder="例：大吉">
+          <select id="f_おみくじ">
+            <option value="">選択してください</option>
+            <option value="大大吉">大大吉</option>
+            <option value="大吉">大吉</option>
+            <option value="中吉">中吉</option>
+            <option value="小吉">小吉</option>
+            <option value="凶">凶</option>
+          </select>
         </div>
       </div>
 
@@ -379,6 +386,23 @@
       <div class="form-group">
         <label>着地</label>
         <input type="text" id="f_着地" placeholder="例：興味あり・検討中">
+      </div>
+
+      <div class="form-group">
+        <label>自己採点（10点満点）</label>
+        <select id="f_自己採点">
+          <option value="">選択してください</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+          <option value="7">7</option>
+          <option value="8">8</option>
+          <option value="9">9</option>
+          <option value="10">10</option>
+        </select>
       </div>
 
       <div class="form-group">
@@ -502,7 +526,7 @@
   }
 
   function clearApoForm() {
-    ['アポ日時','話した内容','着地','次回アクション日時','次回アクション','特記事項'].forEach(function(f) {
+    ['アポ日時','話した内容','着地','自己採点','次回アクション日時','次回アクション','特記事項'].forEach(function(f) {
       var el = document.getElementById('f_' + f);
       if (el) el.value = '';
     });
@@ -564,7 +588,8 @@
       '着地': v('着地'),
       '次回アクション日時': v('次回アクション日時'),
       '次回アクション': v('次回アクション'),
-      '特記事項': v('特記事項')
+      '特記事項': v('特記事項'),
+      '自己採点': v('自己採点')
     };
 
     fetch(GAS_URL, {
