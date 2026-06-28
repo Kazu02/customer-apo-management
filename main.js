@@ -14,6 +14,41 @@ var APO_HEADERS = [
   '話した内容', '着地', '次回アクション日時', '次回アクション', '特記事項', '自己採点'
 ];
 
+var SALES_STAFF_NAME_MAP = {
+  '柳沢': '柳沢悠貴',
+  '柳澤': '柳沢悠貴',
+  '橋沢': '柳沢悠貴',
+  '橋澤': '柳沢悠貴',
+  '岩本': '岩本拓也',
+  '菅原': '菅原貴博',
+  '村井': '村井亮介',
+  '大島': '大島雅史',
+  '小椋': '小椋裕也',
+  '細川': '細川貴弘',
+  '藤森': '藤森宣哉',
+  '須川': '須川一輝',
+  '柳沢悠貴': '柳沢悠貴',
+  '岩本拓也': '岩本拓也',
+  '菅原貴博': '菅原貴博',
+  '村井亮介': '村井亮介',
+  '大島雅史': '大島雅史',
+  '小椋裕也': '小椋裕也',
+  '細川貴弘': '細川貴弘',
+  '藤森宣哉': '藤森宣哉',
+  '須川一輝': '須川一輝'
+};
+
+function normalizeSalesStaff_(value) {
+  var raw = String(value || '').trim();
+  var key = raw.replace(/[\s　]+/g, '');
+  return SALES_STAFF_NAME_MAP[key] || raw;
+}
+
+function normalizePayloadSalesStaff_(data) {
+  data['営業担当'] = normalizeSalesStaff_(data['営業担当']);
+  return data;
+}
+
 // ===== Web App エンドポイント =====
 
 function doGet(e) {
@@ -37,6 +72,7 @@ function doPost(e) {
   var result;
   try {
     var data = JSON.parse(e.parameter.data);
+    normalizePayloadSalesStaff_(data);
     data['タイムスタンプ'] = new Date();
 
     if (data.isNew) {
@@ -113,7 +149,7 @@ function registerCustomer(v) {
   var row = [
     newId,
     v['タイムスタンプ'] || new Date(),
-    v['営業担当'] || '',
+    normalizeSalesStaff_(v['営業担当']),
     v['会社名・屋号'] || '',
     v['名前'] || '',
     v['年齢'] || '',
@@ -146,7 +182,7 @@ function updateCustomerById(data) {
       var row = [
         data.id,
         originalTimestamp,
-        data['営業担当'] || '',
+        normalizeSalesStaff_(data['営業担当']),
         data['会社名・屋号'] || '',
         data['名前'] || '',
         data['年齢'] || '',
@@ -174,7 +210,7 @@ function registerApo(v) {
 
   var row = [
     v['タイムスタンプ'] || new Date(),
-    v['営業担当'] || '',
+    normalizeSalesStaff_(v['営業担当']),
     v['ID-会社名-名前'] || '',
     v['アポ日時'] || '',
     v['話した内容'] || '',
@@ -200,7 +236,7 @@ function setup() {
 function testCustomer() {
   var v = {
     'タイムスタンプ': new Date(),
-    '営業担当': '橋沢',
+    '営業担当': '柳沢悠貴',
     '会社名・屋号': 'テスト株式会社',
     '名前': 'テスト太郎',
     '年齢': '30',
@@ -260,7 +296,7 @@ function buildApoMessage(data, isNew) {
   var header = isNew ? '【新規顧客アポ報告】' : '【アポ報告】';
   var lines = [
     header,
-    '営業担当: ' + (data['営業担当'] || ''),
+    '営業担当: ' + normalizeSalesStaff_(data['営業担当']),
     '顧客: '    + (data['会社名・屋号'] || '') + ' ' + (data['名前'] || '')
   ];
   var fields = ['アポ日時','話した内容','着地','自己採点','次回アクション日時','次回アクション','特記事項'];
@@ -316,7 +352,7 @@ function countByStaff(ss, sheetName, tsColIdx, staffColIdx, dateStr) {
   data.forEach(function(row) {
     if (!row[tsColIdx]) return;
     if (toDateStr(row[tsColIdx]) !== dateStr) return;
-    var staff = String(row[staffColIdx] || '未記入');
+    var staff = normalizeSalesStaff_(row[staffColIdx]) || '未記入';
     counts[staff] = (counts[staff] || 0) + 1;
   });
   return counts;
@@ -366,6 +402,42 @@ function setupDailySummaryTrigger() {
     .inTimezone('Asia/Tokyo')
     .create();
   Logger.log('毎朝9時トリガーを設置しました');
+}
+
+function normalizeExistingSalesStaffNames() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var results = [
+    normalizeSalesStaffColumn_(ss, CUSTOMER_SHEET_NAME),
+    normalizeSalesStaffColumn_(ss, APO_SHEET_NAME)
+  ];
+  Logger.log(JSON.stringify(results));
+  return results;
+}
+
+function normalizeSalesStaffColumn_(ss, sheetName) {
+  var sheet = ss.getSheetByName(sheetName);
+  if (!sheet || sheet.getLastRow() < 2) {
+    return { sheet: sheetName, changed: 0, skipped: true };
+  }
+
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var staffCol = headers.indexOf('営業担当') + 1;
+  if (staffCol <= 0) {
+    return { sheet: sheetName, changed: 0, skipped: true, reason: '営業担当列なし' };
+  }
+
+  var range = sheet.getRange(2, staffCol, sheet.getLastRow() - 1, 1);
+  var values = range.getValues();
+  var changed = 0;
+  var normalizedValues = values.map(function(row) {
+    var original = row[0];
+    var normalized = normalizeSalesStaff_(original);
+    if (original && normalized !== original) changed += 1;
+    return [normalized || original];
+  });
+
+  if (changed > 0) range.setValues(normalizedValues);
+  return { sheet: sheetName, changed: changed, skipped: false };
 }
 
 // ===== ユーティリティ =====

@@ -24,3 +24,9 @@
 - Decision: GAS は必ず shinhogle@gmail.com で操作・デプロイする。バックエンドは `clasp push`→`clasp redeploy <deploymentId>`（URL維持）、フロント `index.html` は GitHub（Kazu02/customer-apo-management）へ push して GitHub Pages 反映。
 - Reason: `executeAs: USER_DEPLOYING` のため、誤アカウント（3s3.cube）でデプロイすると Web アプリが誤アカウントとして実行され、対象スプレッドシート/Drive にアクセスできず本番が壊れる。
 - Consequence: デプロイ前に `clasp show-authorized-user` で shinhogle を確認する。
+
+## 2026-06-28: 営業担当名はアフィリンク紹介者と同じフルネーム表記に統一
+
+- Decision: フォーム顧客管理の営業担当は苗字入力を廃止し、アフィリンク紹介者と同じフルネーム選択式にする。既存データもフルネームへ正規化する。
+- Mapping: 柳沢/柳澤/橋沢/橋澤→柳沢悠貴、岩本→岩本拓也、菅原→菅原貴博、村井→村井亮介、大島→大島雅史、小椋→小椋裕也、細川→細川貴弘、藤森→藤森宣哉。既存データにあった須川→須川一輝もフルネーム化する。
+- Consequence: `main.js` で送信時・集計時・既存データ一括変換時に正規化する。`index.html` は通常選択肢をアフィリンク側の8名にする。

@@ -2,15 +2,16 @@
 
 ## Current
 
-- **デプロイ待ち（ブロック中）**: clasp が 3s3.cube@gmail.com になっており、shinhogle@gmail.com への切替（`clasp logout`→`clasp login`、対話的）が必要。切替後に GAS を `clasp push`→`clasp redeploy`、フロントを GitHub へ push する。
+- 営業担当フルネーム統一はGAS本番反映・既存データ変換済み。フロントはGitHub Pages反映確認を行う。
 
 ## Next
 
 - 統合（名寄せ）の本番動作確認: `統合顧客管理` / `名寄せ` シートが生成され、案件一覧が正しく表示されるか。
 - 名寄せの手動修正フロー（未一致の `紐づけ顧客ID` 入力 → 再実行）の運用確認。
 
-## Completed (実装済み・デプロイ待ち)
+## Completed
 
+- 営業担当をアフィリンク紹介者と同じフルネーム選択式に変更。既存データは `顧客情報` / `アポ報告` ともフルネームへ正規化済み。
 - おみくじを5段階 select（大大吉・大吉・中吉・小吉・凶）に変更（`index.html`）。
 - 自己採点（10点満点）をアポ情報に追加し、`アポ報告` シートへ記録（`index.html` / `main.js`）。既存シートには `ensureHeaders` で列を補完。
 - アフィリンク顧客管理 SS との名前ベース名寄せ統合（`main.js`）。`統合顧客管理` 出力シート、`名寄せ` 手動修正シート（候補提案にレーベンシュタイン距離）、片側のみ顧客の区別表示。
@@ -18,7 +19,6 @@
 
 ## Blockers
 
-- GAS デプロイ: clasp アカウントが shinhogle ではない（対話的 login が必要）。
 - フロント反映: GitHub（Kazu02/customer-apo-management）への push 可否・認証要確認。
 
 ## Backlog

@@ -289,7 +289,17 @@
 
       <div class="form-group">
         <label>営業担当<span class="required">*</span></label>
-        <input type="text" id="f_営業担当" placeholder="例：橋沢">
+        <select id="f_営業担当" required>
+          <option value="">選択してください</option>
+          <option value="柳沢悠貴">柳沢悠貴</option>
+          <option value="岩本拓也">岩本拓也</option>
+          <option value="菅原貴博">菅原貴博</option>
+          <option value="村井亮介">村井亮介</option>
+          <option value="大島雅史">大島雅史</option>
+          <option value="小椋裕也">小椋裕也</option>
+          <option value="細川貴弘">細川貴弘</option>
+          <option value="藤森宣哉">藤森宣哉</option>
+        </select>
       </div>
 
       <div class="row-2">
@@ -434,6 +444,55 @@
   // GASをWebアプリとしてデプロイした後、URLをここに貼り付けてください
   var GAS_URL = 'https://script.google.com/macros/s/AKfycbxqy6u92SxBui5ghG9M1vlhjkvFUH_YvSptfRobbFbSSAykEVg4JYGbAxH1dhuKtgT1FA/exec';
   var PASSWORD = 'Market';
+  var SALES_STAFF_NAME_MAP = {
+    '柳沢': '柳沢悠貴',
+    '柳澤': '柳沢悠貴',
+    '橋沢': '柳沢悠貴',
+    '橋澤': '柳沢悠貴',
+    '岩本': '岩本拓也',
+    '菅原': '菅原貴博',
+    '村井': '村井亮介',
+    '大島': '大島雅史',
+    '小椋': '小椋裕也',
+    '細川': '細川貴弘',
+    '藤森': '藤森宣哉',
+    '須川': '須川一輝',
+    '柳沢悠貴': '柳沢悠貴',
+    '岩本拓也': '岩本拓也',
+    '菅原貴博': '菅原貴博',
+    '村井亮介': '村井亮介',
+    '大島雅史': '大島雅史',
+    '小椋裕也': '小椋裕也',
+    '細川貴弘': '細川貴弘',
+    '藤森宣哉': '藤森宣哉',
+    '須川一輝': '須川一輝'
+  };
+
+  function normalizeSalesStaffName(value) {
+    var raw = String(value || '').trim();
+    var key = raw.replace(/[\s　]+/g, '');
+    return SALES_STAFF_NAME_MAP[key] || raw;
+  }
+
+  function setSalesStaffValue(value) {
+    var el = document.getElementById('f_営業担当');
+    if (!el) return;
+    var normalized = normalizeSalesStaffName(value);
+    if (!normalized) {
+      el.value = '';
+      return;
+    }
+    var exists = Array.prototype.some.call(el.options, function(option) {
+      return option.value === normalized;
+    });
+    if (!exists) {
+      var option = document.createElement('option');
+      option.value = normalized;
+      option.textContent = normalized + '（未登録）';
+      el.appendChild(option);
+    }
+    el.value = normalized;
+  }
 
   // ========== 認証 ==========
   function login() {
@@ -533,7 +592,8 @@
   }
 
   function fillCustomerForm(data) {
-    ['営業担当','会社名・屋号','名前','年齢','住所・エリア',
+    setSalesStaffValue(data['営業担当']);
+    ['会社名・屋号','名前','年齢','住所・エリア',
      '職業','おみくじ','ニーズ','趣味','MBTI','持ち家かどうか','備考'].forEach(function(f) {
       var el = document.getElementById('f_' + f);
       if (el && data[f] !== undefined) el.value = data[f];
@@ -553,7 +613,7 @@
   function submitForm() {
     var btn = document.getElementById('submitBtn');
 
-    var staff = document.getElementById('f_営業担当').value.trim();
+    var staff = normalizeSalesStaffName(document.getElementById('f_営業担当').value);
     if (!staff) {
       alert('営業担当を入力してください');
       return;
