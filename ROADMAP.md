@@ -2,7 +2,7 @@
 
 ## Current
 
-- 営業担当フルネーム統一はGAS本番反映・既存データ変換済み。フロントはGitHub Pages反映確認を行う。
+- 営業担当フルネーム統一はGAS本番反映・既存データ変換・GitHub Pages反映まで完了。
 
 ## Next
 
@@ -19,7 +19,7 @@
 
 ## Blockers
 
-- フロント反映: GitHub（Kazu02/customer-apo-management）への push 可否・認証要確認。
+- なし。
 
 ## Backlog
 
