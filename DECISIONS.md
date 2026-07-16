@@ -36,3 +36,10 @@
 - Operation: 営業担当フルネーム正規化後、対象スプレッドシートで `rebuildIntegratedCustomers()` を実行し、`統合顧客管理` と `名寄せ` を再生成した。
 - Result: `統合顧客管理` は198行・27列、`名寄せ` は148行で生成確認済み。
 - Safety: 実行用の一時Webアクションは削除済み。最終GASデプロイは既存Web App URLを維持したまま version 17（`統合顧客管理更新後 最終`）。
+
+## 2026-07-16: 営業担当名簿を単一配列に集約し 江口裕人 を追加
+
+- Decision: 営業担当の一覧を `SALES_STAFF` 配列（`main.js` / `index.html` 各1箇所）に集約。メンバー増減はこの配列を編集するだけにする。
+- Change: `SALES_STAFF` に `江口裕人` を追加（計9名）。`index.html` の営業担当セレクトはハードコードの `<option>` を廃し `populateSalesStaffOptions()` で `SALES_STAFF` から動的生成。`SALES_STAFF_NAME_MAP`（正規化辞書）は `SALES_STAFF` ∪ `SALES_STAFF_ALIASES` から自動生成に変更（苗字・表記ゆれのみ手動、須川一輝は過去データ用に残置）。
+- Deploy: `clasp push`→`clasp redeploy AKfycbxqy6u9…`（URL維持、version 18）。フロントは GitHub（Kazu02/customer-apo-management）へ push して GitHub Pages 反映。
+- Note: 既存の集計・名寄せは営業担当を動的に扱うため、名簿追加のみで自動対応（ハードコードの担当一覧なし）。

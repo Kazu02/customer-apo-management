@@ -289,16 +289,9 @@
 
       <div class="form-group">
         <label>営業担当<span class="required">*</span></label>
+        <!-- 選択肢は SALES_STAFF から JS で動的生成（メンバー追加は SALES_STAFF を編集するだけ） -->
         <select id="f_営業担当" required>
           <option value="">選択してください</option>
-          <option value="柳沢悠貴">柳沢悠貴</option>
-          <option value="岩本拓也">岩本拓也</option>
-          <option value="菅原貴博">菅原貴博</option>
-          <option value="村井亮介">村井亮介</option>
-          <option value="大島雅史">大島雅史</option>
-          <option value="小椋裕也">小椋裕也</option>
-          <option value="細川貴弘">細川貴弘</option>
-          <option value="藤森宣哉">藤森宣哉</option>
         </select>
       </div>
 
@@ -444,29 +437,42 @@
   // GASをWebアプリとしてデプロイした後、URLをここに貼り付けてください
   var GAS_URL = 'https://script.google.com/macros/s/AKfycbxqy6u92SxBui5ghG9M1vlhjkvFUH_YvSptfRobbFbSSAykEVg4JYGbAxH1dhuKtgT1FA/exec';
   var PASSWORD = 'Market';
-  var SALES_STAFF_NAME_MAP = {
-    '柳沢': '柳沢悠貴',
-    '柳澤': '柳沢悠貴',
-    '橋沢': '柳沢悠貴',
-    '橋澤': '柳沢悠貴',
-    '岩本': '岩本拓也',
-    '菅原': '菅原貴博',
-    '村井': '村井亮介',
-    '大島': '大島雅史',
-    '小椋': '小椋裕也',
-    '細川': '細川貴弘',
-    '藤森': '藤森宣哉',
-    '須川': '須川一輝',
-    '柳沢悠貴': '柳沢悠貴',
-    '岩本拓也': '岩本拓也',
-    '菅原貴博': '菅原貴博',
-    '村井亮介': '村井亮介',
-    '大島雅史': '大島雅史',
-    '小椋裕也': '小椋裕也',
-    '細川貴弘': '細川貴弘',
-    '藤森宣哉': '藤森宣哉',
-    '須川一輝': '須川一輝'
+
+  // ===== 営業担当 名簿（単一の変更点）=====
+  // メンバーの増減はこの SALES_STAFF 配列を編集するだけ。選択肢もこの配列から動的生成する。
+  // ※ main.js 側の SALES_STAFF と必ず同じ内容に保つこと。
+  var SALES_STAFF = [
+    '柳沢悠貴', '岩本拓也', '菅原貴博', '村井亮介',
+    '大島雅史', '小椋裕也', '細川貴弘', '藤森宣哉', '江口裕人'
+  ];
+  // 表記ゆれ・苗字のみ → フルネーム（正規名の自己対応は SALES_STAFF から自動生成）。
+  // 須川一輝 は現行名簿外だが過去データ正規化のため残す。
+  var SALES_STAFF_ALIASES = {
+    '柳沢': '柳沢悠貴', '柳澤': '柳沢悠貴', '橋沢': '柳沢悠貴', '橋澤': '柳沢悠貴',
+    '岩本': '岩本拓也', '菅原': '菅原貴博', '村井': '村井亮介', '大島': '大島雅史',
+    '小椋': '小椋裕也', '細川': '細川貴弘', '藤森': '藤森宣哉', '江口': '江口裕人',
+    '須川': '須川一輝', '須川一輝': '須川一輝'
   };
+  var SALES_STAFF_NAME_MAP = (function() {
+    var m = {};
+    SALES_STAFF.forEach(function(n) { m[n] = n; });
+    Object.keys(SALES_STAFF_ALIASES).forEach(function(k) { m[k] = SALES_STAFF_ALIASES[k]; });
+    return m;
+  })();
+
+  // 営業担当セレクトを SALES_STAFF から生成（先頭のプレースホルダは残す）
+  function populateSalesStaffOptions() {
+    var el = document.getElementById('f_営業担当');
+    if (!el) return;
+    SALES_STAFF.forEach(function(name) {
+      var exists = Array.prototype.some.call(el.options, function(o) { return o.value === name; });
+      if (exists) return;
+      var opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      el.appendChild(opt);
+    });
+  }
 
   function normalizeSalesStaffName(value) {
     var raw = String(value || '').trim();
@@ -515,6 +521,9 @@
   document.getElementById('passwordInput').addEventListener('keypress', function(e) {
     if (e.key === 'Enter') login();
   });
+
+  // 営業担当セレクトの選択肢を名簿から生成
+  populateSalesStaffOptions();
 
   if (sessionStorage.getItem('auth') === '1') {
     document.getElementById('passwordScreen').style.display = 'none';
