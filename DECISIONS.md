@@ -43,3 +43,10 @@
 - Change: `SALES_STAFF` に `江口裕人` を追加（計9名）。`index.html` の営業担当セレクトはハードコードの `<option>` を廃し `populateSalesStaffOptions()` で `SALES_STAFF` から動的生成。`SALES_STAFF_NAME_MAP`（正規化辞書）は `SALES_STAFF` ∪ `SALES_STAFF_ALIASES` から自動生成に変更（苗字・表記ゆれのみ手動、須川一輝は過去データ用に残置）。
 - Deploy: `clasp push`→`clasp redeploy AKfycbxqy6u9…`（URL維持、version 18）。フロントは GitHub（Kazu02/customer-apo-management）へ push して GitHub Pages 反映。
 - Note: 既存の集計・名寄せは営業担当を動的に扱うため、名簿追加のみで自動対応（ハードコードの担当一覧なし）。
+
+## 2026-07-24: 営業担当名簿に 藤井勇大 を追加（計10名）
+
+- 背景: アフィリンク側の担当別データ再生成で、自社フォーム回答の紹介者名「藤井勇大」が名簿に無く除外されていることが判明。ユーザー判断で正式メンバーとして追加し、市場作り配下の3プロジェクトで名簿を揃えた。
+- Change: `SALES_STAFF` に `藤井勇大` を追加（`main.js` / `index.html` の両方・計10名）。`SALES_STAFF_ALIASES` に `'藤井': '藤井勇大'` を追加（苗字のみ入力の正規化用）。選択肢は `populateSalesStaffOptions()` が `SALES_STAFF` から動的生成するので他の変更は不要。
+- Note: 既存の `藤森宣哉` と苗字の一文字目が同じだが、`SALES_STAFF_NAME_MAP` は完全一致で引くため衝突しない。
+- Deploy: `clasp push`→`clasp redeploy AKfycbxqy6u9…`（URL維持、version 18→19）。フロントは GitHub（Kazu02/customer-apo-management）へ push して GitHub Pages 反映。
