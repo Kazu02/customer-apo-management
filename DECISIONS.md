@@ -50,3 +50,20 @@
 - Change: `SALES_STAFF` に `藤井勇大` を追加（`main.js` / `index.html` の両方・計10名）。`SALES_STAFF_ALIASES` に `'藤井': '藤井勇大'` を追加（苗字のみ入力の正規化用）。選択肢は `populateSalesStaffOptions()` が `SALES_STAFF` から動的生成するので他の変更は不要。
 - Note: 既存の `藤森宣哉` と苗字の一文字目が同じだが、`SALES_STAFF_NAME_MAP` は完全一致で引くため衝突しない。
 - Deploy: `clasp push`→`clasp redeploy AKfycbxqy6u9…`（URL維持、version 18→19）。フロントは GitHub（Kazu02/customer-apo-management）へ push して GitHub Pages 反映。
+
+## 2026-07-26: 既存顧客の選択を「顧客名で検索」方式に変更
+
+- Decision: 顧客選択の全件ドロップダウン（`<select>`・140件）を、顧客名で絞り込む検索コンボボックスに置き換える。
+- Reason: 既存顧客に追記するとき、140件のリストから目視で探すのが実用的でなくなっていたため。営業担当が現場で名前から即座に引けることを優先する。
+- Change:
+  - `index.html`: 検索入力＋候補リスト＋選択中バー（`cs-*` クラス）。候補は顧客名・会社名・ID・営業担当を対象に絞り込み、一致箇所を `<mark>` でハイライト。表示は最大50件（超過分は件数を表示）。キーボード（↑↓/Enter/Esc）、外側クリックで閉じる、`選択解除` で新規モードに戻る。旧 `renderCustomerSelect` / `onCustomerChange` は廃止。
+  - 検索の正規化: 全角英数→半角、ひらがな→カタカナ、空白・記号（・, 、. 。- ー _ /）除去、小文字化。空白区切りの複数語はAND条件。並び順は 名前の前方一致 > ID完全一致 > 名前の部分一致 > 会社名 > ID前方一致 > 営業担当。
+  - `main.js`: `getCustomerListData()` の返却に `company` / `name` / `staff` を追加（`label` は従来どおり互換維持）。フロントは旧応答でも `label` から復元できるフォールバックを持つ。
+- Note: 読みがな列が無いため、漢字氏名をひらがなで検索することはできない（「たなか」→「田中太郎」は不一致）。必要なら `顧客情報` にフリガナ列を足す前提の別対応になる。
+- Deploy: `clasp push` → `clasp redeploy AKfycbxqy6u9…`（URL維持、version 19→20）。フロントは GitHub（Kazu02/customer-apo-management）へ push して GitHub Pages 反映。
+
+## 2026-07-26: 既存顧客の年齢が再送信で消える不具合を修正
+
+- Problem: `顧客情報` に全角数字（例「２６」）や「35歳」形式で入っている年齢は、`<input type="number">` が受け付けず空欄で読み込まれる。その状態で送信すると `updateCustomerById` が全項目を上書きするため、年齢がシートから消えていた。
+- Fix: `fillCustomerForm` で年齢を半角数字に正規化してから流し込む（全角→半角、数字以外を除去）。
+- Note: 検索対応で「既存顧客に追記」が主動線になるため、同時に修正した。

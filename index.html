@@ -243,6 +243,155 @@
 
     .mode-new { background: #fef3c7; color: #92400e; }
     .mode-edit { background: #dbeafe; color: #1e40af; }
+
+    /* ========== 顧客検索（コンボボックス） ========== */
+    .cs-box { display: none; }
+    .cs-box.ready { display: block; }
+
+    .cs-input-row { position: relative; }
+
+    /* 汎用の input[type="text"] ルールより後・同等の詳細度にするため要素名付きで指定 */
+    input.cs-input {
+      width: 100%;
+      padding: 11px 40px 11px 36px;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 16px;
+      font-family: inherit;
+      color: #333;
+      background: #fff;
+      -webkit-appearance: none;
+      appearance: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    input.cs-input:focus {
+      outline: none;
+      border-color: #4a86e8;
+      box-shadow: 0 0 0 3px rgba(74,134,232,0.12);
+    }
+
+    .cs-search-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 15px;
+      height: 15px;
+      opacity: 0.45;
+      pointer-events: none;
+    }
+
+    .cs-clear {
+      position: absolute;
+      right: 4px;
+      top: 50%;
+      transform: translateY(-50%);
+      display: none;
+      border: none;
+      background: transparent;
+      color: #a0aec0;
+      font-size: 20px;
+      line-height: 1;
+      padding: 6px 11px;
+      cursor: pointer;
+    }
+
+    .cs-clear.show { display: block; }
+
+    .cs-results {
+      display: none;
+      margin-top: 6px;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 8px;
+      background: #fff;
+      max-height: 300px;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.07);
+    }
+
+    .cs-results.open { display: block; }
+
+    .cs-item {
+      padding: 10px 13px;
+      cursor: pointer;
+      border-bottom: 1px solid #f1f5f9;
+    }
+
+    .cs-item:last-child { border-bottom: none; }
+    .cs-item.active { background: #eef4fd; }
+
+    .cs-item-main { font-size: 15px; color: #333; line-height: 1.35; }
+    .cs-item-sub { font-size: 11px; color: #94a3b8; margin-top: 3px; }
+    .cs-item mark { background: #fde68a; color: inherit; padding: 0 1px; border-radius: 2px; }
+
+    .cs-item-new { background: #fffbeb; }
+    .cs-item-new .cs-item-main { color: #92400e; font-weight: 600; }
+    .cs-item-new .cs-item-sub { color: #b45309; }
+
+    .cs-empty {
+      padding: 16px 13px;
+      color: #94a3b8;
+      font-size: 13px;
+      text-align: center;
+    }
+
+    .cs-more {
+      padding: 8px 13px;
+      background: #f8fafc;
+      color: #94a3b8;
+      font-size: 11px;
+      text-align: center;
+    }
+
+    .cs-selected {
+      display: none;
+      margin-top: 8px;
+      padding: 10px 12px;
+      border: 1.5px solid #bfdbfe;
+      background: #f0f7ff;
+      border-radius: 8px;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .cs-selected.show { display: flex; }
+
+    .cs-selected-body { flex: 1; min-width: 0; }
+
+    .cs-selected-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: #1e3a8a;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .cs-selected-sub {
+      font-size: 11px;
+      color: #6b9fe0;
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .cs-selected-reset {
+      flex: none;
+      border: 1px solid #bfdbfe;
+      background: #fff;
+      color: #1e40af;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 8px 11px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .cs-selected-reset:active { background: #e8f1fd; }
   </style>
 </head>
 <body>
@@ -278,8 +427,30 @@
         <span class="mode-badge mode-new" id="modeBadge">新規</span>
       </div>
       <div class="form-group">
-        <label>顧客を選ぶ</label>
-        <div id="customerSelectWrap" class="loading-text">読み込み中...</div>
+        <label>顧客を検索して選ぶ</label>
+        <div id="customerSelectStatus" class="loading-text">読み込み中...</div>
+        <div class="cs-box" id="customerSearchBox">
+          <div class="cs-input-row">
+            <svg class="cs-search-icon" viewBox="0 0 20 20" fill="none" stroke="#333" stroke-width="2" stroke-linecap="round">
+              <circle cx="8.5" cy="8.5" r="5.5"/><line x1="12.8" y1="12.8" x2="17.5" y2="17.5"/>
+            </svg>
+            <input type="text" id="customerSearchInput" class="cs-input"
+                   placeholder="顧客名で検索"
+                   autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+                   inputmode="search" enterkeyhint="search"
+                   role="combobox" aria-autocomplete="list" aria-expanded="false"
+                   aria-controls="customerResults">
+            <button type="button" class="cs-clear" id="customerClearBtn" aria-label="検索条件をクリア">×</button>
+          </div>
+          <div class="cs-results" id="customerResults" role="listbox"></div>
+          <div class="cs-selected" id="customerSelected">
+            <div class="cs-selected-body">
+              <div class="cs-selected-name" id="customerSelectedName"></div>
+              <div class="cs-selected-sub" id="customerSelectedSub"></div>
+            </div>
+            <button type="button" class="cs-selected-reset" onclick="selectNewCustomer()">選択解除</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -537,45 +708,244 @@
   var currentCustomerId = null;
 
   function loadCustomers() {
-    document.getElementById('customerSelectWrap').innerHTML = '<div class="loading-text">読み込み中...</div>';
+    var status = document.getElementById('customerSelectStatus');
+    var box = document.getElementById('customerSearchBox');
+    status.className = 'loading-text';
+    status.textContent = '読み込み中...';
+    status.style.display = 'block';
+    box.classList.remove('ready');
+
     fetch(GAS_URL + '?action=getCustomers')
       .then(function(r) { return r.json(); })
       .then(function(data) {
-        customers = data;
-        renderCustomerSelect();
+        customers = (data || []).map(prepareCustomer);
+        status.style.display = 'none';
+        box.classList.add('ready');
+        document.getElementById('customerSearchInput').placeholder =
+          '顧客名で検索（全' + customers.length + '件）';
+        renderCustomerResults();
       })
       .catch(function() {
-        document.getElementById('customerSelectWrap').innerHTML =
-          '<div class="error-text">読み込みに失敗しました。GAS URLを確認してください。</div>';
+        status.className = 'error-text';
+        status.textContent = '読み込みに失敗しました。GAS URLを確認してください。';
+        status.style.display = 'block';
       });
   }
 
-  function renderCustomerSelect() {
-    var html = '<select id="customerSelect" onchange="onCustomerChange(this.value)" style="width:100%;padding:11px 36px 11px 13px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:16px;background:#fff;-webkit-appearance:none;appearance:none;background-image:url(\'data:image/svg+xml,%3Csvg xmlns=\\\'http://www.w3.org/2000/svg\\\' width=\\\'12\\\' height=\\\'8\\\' viewBox=\\\'0 0 12 8\\\'%3E%3Cpath fill=\\\'%23888\\\' d=\\\'M6 8L0 0h12z\\\'/%3E%3C/svg%3E\');background-repeat:no-repeat;background-position:right 14px center">';
-    html += '<option value="">-- 顧客を選択 または 新規追加 --</option>';
-    html += '<option value="new">＋ 新規追加</option>';
-    customers.forEach(function(c) {
-      html += '<option value="' + c.id + '">' + escapeHtml(c.label) + '</option>';
+  // ========== 顧客検索（名前・会社名・ID） ==========
+  var csEntries = [];        // 描画中の候補（先頭は新規追加）
+  var csActiveIndex = -1;
+  var CS_MAX_RESULTS = 50;
+
+  // 検索用の正規化: 全角英数→半角 / ひらがな→カタカナ / 記号・空白除去 / 小文字化
+  function csNormalize(value) {
+    var s = String(value === null || value === undefined ? '' : value);
+    s = s.replace(/[Ａ-Ｚａ-ｚ０-９]/g, function(ch) {
+      return String.fromCharCode(ch.charCodeAt(0) - 0xFEE0);
     });
-    html += '</select>';
-    document.getElementById('customerSelectWrap').innerHTML = html;
+    s = s.replace(/[ぁ-ゖ]/g, function(ch) {
+      return String.fromCharCode(ch.charCodeAt(0) + 0x60);
+    });
+    s = s.replace(/[\s　・,、.。\-ー－―‐_/／]/g, '');
+    return s.toLowerCase();
   }
 
-  function onCustomerChange(val) {
-    var badge = document.getElementById('modeBadge');
-    if (val === '' || val === 'new') {
-      currentCustomerId = null;
-      clearCustomerForm();
-      badge.textContent = '新規';
-      badge.className = 'mode-badge mode-new';
-      return;
+  // company / name は GAS 側の追加項目。旧バージョン応答は label から復元する。
+  function prepareCustomer(c) {
+    var company = c.company;
+    var name = c.name;
+    if (company === undefined || name === undefined) {
+      var parts = String(c.label || '').split(' - ');
+      if (parts.length >= 3) {
+        name = parts[parts.length - 1];
+        company = parts.slice(1, parts.length - 1).join(' - ');
+      } else {
+        name = c.label || '';
+        company = '';
+      }
+    }
+    c.company = String(company || '').trim();
+    c.name = String(name || '').trim();
+    c._nName = csNormalize(c.name);
+    c._nCompany = csNormalize(c.company);
+    c._nStaff = csNormalize(c.staff);
+    c._id = String(c.id);
+    return c;
+  }
+
+  function csTokens(query) {
+    return String(query || '').trim().split(/[\s　]+/).filter(function(t) { return t !== ''; });
+  }
+
+  // 名前の前方一致を最上位に、会社名・ID も対象にする（複数語はAND）
+  function csSearch(query) {
+    var tokens = csTokens(query).map(csNormalize).filter(function(t) { return t !== ''; });
+    if (!tokens.length) return customers.slice();
+
+    var hits = [];
+    customers.forEach(function(c) {
+      var score = 0;
+      var matched = tokens.every(function(t) {
+        var s = -1;
+        if (c._nName && c._nName.indexOf(t) === 0) s = 100;
+        else if (c._id === t) s = 95;
+        else if (c._nName && c._nName.indexOf(t) > 0) s = 70;
+        else if (c._nCompany && c._nCompany.indexOf(t) === 0) s = 60;
+        else if (c._nCompany && c._nCompany.indexOf(t) > 0) s = 45;
+        else if (c._id.indexOf(t) === 0) s = 30;
+        else if (c._nStaff && c._nStaff.indexOf(t) === 0) s = 20;
+        if (s < 0) return false;
+        score += s;
+        return true;
+      });
+      if (matched) hits.push({ c: c, score: score });
+    });
+
+    hits.sort(function(a, b) {
+      if (b.score !== a.score) return b.score - a.score;
+      return Number(a.c.id) - Number(b.c.id);
+    });
+    return hits.map(function(h) { return h.c; });
+  }
+
+  // 入力語に一致した箇所をハイライト（HTMLエスケープしてから mark で囲む）
+  function csHighlight(text, tokens) {
+    var src = String(text === null || text === undefined ? '' : text);
+    if (!tokens.length || !src) return escapeHtml(src);
+
+    var lower = src.toLowerCase();
+    var ranges = [];
+    tokens.forEach(function(token) {
+      var t = token.toLowerCase();
+      if (!t) return;
+      var from = 0;
+      var idx = lower.indexOf(t, from);
+      while (idx !== -1) {
+        ranges.push([idx, idx + t.length]);
+        from = idx + t.length;
+        idx = lower.indexOf(t, from);
+      }
+    });
+    if (!ranges.length) return escapeHtml(src);
+
+    ranges.sort(function(a, b) { return a[0] - b[0]; });
+    var merged = [ranges[0].slice()];
+    for (var i = 1; i < ranges.length; i++) {
+      var last = merged[merged.length - 1];
+      if (ranges[i][0] <= last[1]) last[1] = Math.max(last[1], ranges[i][1]);
+      else merged.push(ranges[i].slice());
     }
 
-    currentCustomerId = Number(val);
-    badge.textContent = '編集';
-    badge.className = 'mode-badge mode-edit';
+    var html = '';
+    var pos = 0;
+    merged.forEach(function(r) {
+      html += escapeHtml(src.slice(pos, r[0])) + '<mark>' + escapeHtml(src.slice(r[0], r[1])) + '</mark>';
+      pos = r[1];
+    });
+    return html + escapeHtml(src.slice(pos));
+  }
 
-    fetch(GAS_URL + '?action=getCustomer&id=' + val)
+  function renderCustomerResults() {
+    var input = document.getElementById('customerSearchInput');
+    var box = document.getElementById('customerResults');
+    if (!input || !box) return;
+
+    var query = input.value;
+    var tokens = csTokens(query);
+    var matches = csSearch(query);
+    var shown = matches.slice(0, CS_MAX_RESULTS);
+
+    csEntries = [{ type: 'new' }].concat(shown.map(function(c) {
+      return { type: 'customer', customer: c };
+    }));
+    csActiveIndex = -1;
+
+    var html = '<div class="cs-item cs-item-new" data-index="0" role="option">'
+      + '<div class="cs-item-main">＋ 新規顧客として登録</div>'
+      + '<div class="cs-item-sub">一覧から選ばず、新しい顧客として登録します</div>'
+      + '</div>';
+
+    if (!shown.length) {
+      html += '<div class="cs-empty">「' + escapeHtml(query) + '」に一致する顧客は見つかりませんでした</div>';
+    } else {
+      shown.forEach(function(c, i) {
+        var sub = 'ID ' + escapeHtml(c._id);
+        if (c.company) sub += '　' + csHighlight(c.company, tokens);
+        if (c.staff) sub += '　担当: ' + escapeHtml(c.staff);
+        html += '<div class="cs-item" data-index="' + (i + 1) + '" role="option">'
+          + '<div class="cs-item-main">' + csHighlight(c.name || '（名前未登録）', tokens) + '</div>'
+          + '<div class="cs-item-sub">' + sub + '</div>'
+          + '</div>';
+      });
+      if (matches.length > shown.length) {
+        html += '<div class="cs-more">他 ' + (matches.length - shown.length) + ' 件。顧客名を入力して絞り込んでください</div>';
+      }
+    }
+
+    box.innerHTML = html;
+  }
+
+  function openCustomerResults() {
+    var box = document.getElementById('customerResults');
+    box.classList.add('open');
+    document.getElementById('customerSearchInput').setAttribute('aria-expanded', 'true');
+  }
+
+  function closeCustomerResults() {
+    var box = document.getElementById('customerResults');
+    box.classList.remove('open');
+    document.getElementById('customerSearchInput').setAttribute('aria-expanded', 'false');
+    csActiveIndex = -1;
+  }
+
+  function setCsActive(index) {
+    var box = document.getElementById('customerResults');
+    var items = box.querySelectorAll('.cs-item');
+    if (!items.length) return;
+    if (index < 0) index = items.length - 1;
+    if (index >= items.length) index = 0;
+    csActiveIndex = index;
+    for (var i = 0; i < items.length; i++) {
+      if (i === index) {
+        items[i].classList.add('active');
+        if (items[i].scrollIntoView) items[i].scrollIntoView({ block: 'nearest' });
+      } else {
+        items[i].classList.remove('active');
+      }
+    }
+  }
+
+  function chooseCsEntry(index) {
+    var entry = csEntries[index];
+    if (!entry) return;
+    if (entry.type === 'new') selectNewCustomer();
+    else selectExistingCustomer(entry.customer);
+  }
+
+  function setModeBadge(isEdit) {
+    var badge = document.getElementById('modeBadge');
+    badge.textContent = isEdit ? '編集' : '新規';
+    badge.className = isEdit ? 'mode-badge mode-edit' : 'mode-badge mode-new';
+  }
+
+  function selectExistingCustomer(c) {
+    currentCustomerId = Number(c.id);
+    setModeBadge(true);
+
+    var selected = document.getElementById('customerSelected');
+    document.getElementById('customerSelectedName').textContent = c.name || '（名前未登録）';
+    document.getElementById('customerSelectedSub').textContent =
+      'ID ' + c._id + (c.company ? '　' + c.company : '') + '　に追記します';
+    selected.classList.add('show');
+
+    var input = document.getElementById('customerSearchInput');
+    input.value = '';
+    document.getElementById('customerClearBtn').classList.remove('show');
+    input.blur();
+    closeCustomerResults();
+    renderCustomerResults();
+
+    fetch(GAS_URL + '?action=getCustomer&id=' + encodeURIComponent(c.id))
       .then(function(r) { return r.json(); })
       .then(function(data) {
         if (data) fillCustomerForm(data);
@@ -584,6 +954,78 @@
         alert('顧客データの取得に失敗しました');
       });
   }
+
+  function selectNewCustomer() {
+    currentCustomerId = null;
+    clearCustomerForm();
+    setModeBadge(false);
+    document.getElementById('customerSelected').classList.remove('show');
+
+    var input = document.getElementById('customerSearchInput');
+    input.value = '';
+    document.getElementById('customerClearBtn').classList.remove('show');
+    input.blur();
+    closeCustomerResults();
+    renderCustomerResults();
+  }
+
+  (function initCustomerSearch() {
+    var input = document.getElementById('customerSearchInput');
+    var box = document.getElementById('customerResults');
+    var clearBtn = document.getElementById('customerClearBtn');
+
+    input.addEventListener('input', function() {
+      clearBtn.classList.toggle('show', input.value !== '');
+      renderCustomerResults();
+      openCustomerResults();
+    });
+
+    input.addEventListener('focus', function() {
+      renderCustomerResults();
+      openCustomerResults();
+    });
+
+    input.addEventListener('keydown', function(e) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (!box.classList.contains('open')) {
+          renderCustomerResults();
+          openCustomerResults();
+        }
+        setCsActive(csActiveIndex + (e.key === 'ArrowDown' ? 1 : -1));
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (csActiveIndex >= 0) chooseCsEntry(csActiveIndex);
+        else if (csEntries.length === 2) chooseCsEntry(1);   // 候補が1件だけならそれを選ぶ
+      } else if (e.key === 'Escape') {
+        closeCustomerResults();
+        input.blur();
+      }
+    });
+
+    // クリックでフォーカスが外れて閉じる前に選択できるようにする
+    box.addEventListener('mousedown', function(e) { e.preventDefault(); });
+
+    box.addEventListener('click', function(e) {
+      var node = e.target;
+      while (node && node !== box && !node.classList.contains('cs-item')) node = node.parentNode;
+      if (!node || node === box) return;
+      chooseCsEntry(Number(node.getAttribute('data-index')));
+    });
+
+    clearBtn.addEventListener('click', function() {
+      input.value = '';
+      clearBtn.classList.remove('show');
+      renderCustomerResults();
+      openCustomerResults();
+      input.focus();
+    });
+
+    document.addEventListener('click', function(e) {
+      var wrap = document.getElementById('customerSearchBox');
+      if (wrap && !wrap.contains(e.target)) closeCustomerResults();
+    });
+  })();
 
   function clearCustomerForm() {
     ['営業担当','会社名・屋号','名前','年齢','生年月日','住所・エリア',
@@ -603,11 +1045,20 @@
 
   function fillCustomerForm(data) {
     setSalesStaffValue(data['営業担当']);
-    ['会社名・屋号','名前','年齢','住所・エリア',
+    ['会社名・屋号','名前','住所・エリア',
      '職業','おみくじ','ニーズ','趣味','MBTI','持ち家かどうか','備考'].forEach(function(f) {
       var el = document.getElementById('f_' + f);
       if (el && data[f] !== undefined) el.value = data[f];
     });
+
+    // 年齢: number入力は全角数字・「35歳」等を受け付けず空になる（＝再送信で値が消える）ので半角数字に正規化
+    var ageEl = document.getElementById('f_年齢');
+    if (ageEl && data['年齢'] !== undefined) {
+      var age = String(data['年齢'])
+        .replace(/[０-９]/g, function(ch) { return String.fromCharCode(ch.charCodeAt(0) - 0xFEE0); })
+        .replace(/[^0-9]/g, '');
+      ageEl.value = age;
+    }
 
     // 生年月日: "yyyy/MM/dd" → "yyyy-MM-dd"
     var dob = data['生年月日'];
@@ -674,11 +1125,8 @@
             ? '新規顧客を登録しました（ID: ' + result.id + '）'
             : '顧客情報を更新しました';
           showSuccess(msg);
+          selectNewCustomer();
           loadCustomers();
-          clearCustomerForm();
-          currentCustomerId = null;
-          document.getElementById('modeBadge').textContent = '新規';
-          document.getElementById('modeBadge').className = 'mode-badge mode-new';
           window.scrollTo({ top: 0, behavior: 'smooth' });
         } else {
           alert('エラー: ' + (result.error || '不明なエラー'));

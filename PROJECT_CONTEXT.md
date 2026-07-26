@@ -19,8 +19,9 @@
 
 ## System Scope
 
-- フロントエンド: `index.html`（パスワード認証 → 顧客選択 → 顧客情報＋アポ情報フォーム）。GitHub Pages 配信（`github.com/Kazu02/customer-apo-management`）。
-- バックエンド: GAS Web App（`main.js`）。`doGet`（getCustomers / getCustomer）、`doPost`（新規登録 / 既存更新＋アポ報告）。
+- フロントエンド: `index.html`（パスワード認証 → 顧客検索・選択 → 顧客情報＋アポ情報フォーム）。GitHub Pages 配信（`github.com/Kazu02/customer-apo-management`）。
+  - 既存顧客は**顧客名（会社名・ID・営業担当も可）で検索**して選ぶ。全件ドロップダウンは廃止。実装は `cs-*` クラス群と `csSearch` / `renderCustomerResults` / `selectExistingCustomer` / `selectNewCustomer`。
+- バックエンド: GAS Web App（`main.js`）。`doGet`（getCustomers / getCustomer）、`doPost`（新規登録 / 既存更新＋アポ報告）。`getCustomers` は `{id, label, company, name, staff}` を返す。
 - データ: バインドされたスプレッドシート。シート `顧客情報` / `アポ報告`、統合で `統合顧客管理` / `名寄せ`。
 - 顧客情報項目: ID / タイムスタンプ / 営業担当 / 会社名・屋号 / 名前 / 年齢 / 住所・エリア / 職業 / **おみくじ（5段階 select: 大大吉・大吉・中吉・小吉・凶）** / ニーズ / 生年月日 / 趣味 / MBTI / 持ち家かどうか / 備考。
 - アポ報告項目: タイムスタンプ / 営業担当 / ID-会社名-名前 / アポ日時 / 話した内容 / 着地 / 次回アクション日時 / 次回アクション / 特記事項 / **自己採点（10点満点）**。

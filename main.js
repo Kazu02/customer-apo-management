@@ -101,7 +101,8 @@ function doPost(e) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-// ===== 顧客一覧をドロップダウン用に返す =====
+// ===== 顧客一覧を検索・選択用に返す =====
+// label は従来互換。company / name / staff はフロントの顧客名検索用（追加項目）。
 function getCustomerListData() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(CUSTOMER_SHEET_NAME);
@@ -111,7 +112,15 @@ function getCustomerListData() {
   return data
     .filter(function(row) { return row[0] !== ''; })
     .map(function(row) {
-      return { id: row[0], label: row[0] + ' - ' + row[3] + ' - ' + row[4] };
+      var company = row[3] === null || row[3] === undefined ? '' : String(row[3]).trim();
+      var name = row[4] === null || row[4] === undefined ? '' : String(row[4]).trim();
+      return {
+        id: row[0],
+        label: row[0] + ' - ' + company + ' - ' + name,
+        company: company,
+        name: name,
+        staff: normalizeSalesStaff_(row[2])
+      };
     });
 }
 
