@@ -490,6 +490,11 @@ var INTEGRATED_PROFILE_HEADERS = [
   'おみくじ', 'ニーズ', '趣味', 'MBTI', '持ち家かどうか'
 ];
 
+// 振込先（口座情報）列。別GASプロジェクト payout-form が「持ち家かどうか」の直後に
+// 挿入・書き込みする6列で、統合ビューの再構築でも必ず同じ位置に維持する。
+// ここに含めないと writeIntegratedSheet_ の clear() で列も回答も消える。
+var PAYOUT_HEADERS = ['金融機関名', '支店名', '預金種目', '口座番号', '口座名義(カナ)', '振込先登録日時'];
+
 var MATCHING_HEADERS = [
   'アフィリンク顧客名', 'アフィリンク営業担当', '案件数',
   '紐づけ顧客ID（編集可）', '紐づけ名前', '状態', '候補（近い名前）'
@@ -608,10 +613,61 @@ function loadMatchingRows_() {
   return existing;
 }
 
+// 既存の統合顧客管理から振込先6列を退避する（再構築で消さないため）。
+// 先頭ゼロ（口座番号・ゆうちょ店番）を落とさないよう表示値で読む。
+// キーは顧客ID優先。「アフィリンクのみ」行はIDが無いので正規化した名前でも引けるようにする。
+function loadPayoutSnapshot_(ss) {
+  var snap = { byId: {}, byName: {} };
+  var sheet = ss.getSheetByName(INTEGRATED_SHEET_NAME);
+  if (!sheet || sheet.getLastRow() < 2 || sheet.getLastColumn() < 1) return snap;
+  var lastCol = sheet.getLastColumn();
+  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function(h) { return String(h).trim(); });
+  var start = headers.indexOf(PAYOUT_HEADERS[0]);
+  if (start < 0) return snap; // 振込先列がまだ無い（初回）
+  var width = Math.min(PAYOUT_HEADERS.length, lastCol - start);
+  if (width < 1) return snap;
+  var n = sheet.getLastRow() - 1;
+  var idCol = headers.indexOf('顧客ID');
+  var nameCol = headers.indexOf('名前');
+  var vals = sheet.getRange(2, start + 1, n, width).getDisplayValues();
+  var ids = idCol >= 0 ? sheet.getRange(2, idCol + 1, n, 1).getDisplayValues() : null;
+  var names = nameCol >= 0 ? sheet.getRange(2, nameCol + 1, n, 1).getDisplayValues() : null;
+  for (var i = 0; i < n; i++) {
+    var row = vals[i].slice(0, PAYOUT_HEADERS.length);
+    while (row.length < PAYOUT_HEADERS.length) row.push('');
+    if (!row.join('').trim()) continue; // 空行は退避しない
+    var id = ids ? String(ids[i][0]).trim() : '';
+    var nm = names ? normName_(names[i][0]) : '';
+    if (id) snap.byId[id] = row;
+    if (nm && !snap.byName[nm]) snap.byName[nm] = row;
+  }
+  return snap;
+}
+
+// 退避した振込先を顧客ID→名前の順で引く。見つからなければ空6セル。
+function payoutFor_(snap, id, name) {
+  var key = (id === null || id === undefined) ? '' : String(id).trim();
+  if (key && snap.byId[key]) return snap.byId[key].slice();
+  var nk = normName_(name);
+  if (nk && snap.byName[nk]) return snap.byName[nk].slice();
+  var empty = [];
+  for (var i = 0; i < PAYOUT_HEADERS.length; i++) empty.push('');
+  return empty;
+}
+
 // シートを丸ごと書き換え（ヘッダー書式付き）
-function writeIntegratedSheet_(ss, name, headers, rows, headerColor) {
+// beforeWrite: clear() は書式も消すため、値を入れる前に書式を戻したいときに使う。
+function writeIntegratedSheet_(ss, name, headers, rows, headerColor, beforeWrite) {
   var sheet = ss.getSheetByName(name) || ss.insertSheet(name);
+  // 列・行が足りないと setValues が失敗するので先に広げる（案件が増えても落ちないように）
+  if (headers.length > sheet.getMaxColumns()) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), headers.length - sheet.getMaxColumns());
+  }
+  if (rows.length + 1 > sheet.getMaxRows()) {
+    sheet.insertRowsAfter(sheet.getMaxRows(), rows.length + 1 - sheet.getMaxRows());
+  }
   sheet.clear();
+  if (beforeWrite) beforeWrite(sheet);
   sheet.getRange(1, 1, 1, headers.length).setValues([headers])
     .setFontWeight('bold').setBackground(headerColor).setFontColor('#ffffff');
   if (rows.length) sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
@@ -636,6 +692,8 @@ function colorCaseCells_(sheet, startRow, startCol, statusMatrix) {
 // 名寄せの「紐づけ顧客ID（編集可）」を手で直すと、次回実行時にその紐づけが優先される。
 function rebuildIntegratedCustomers() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
+  // 振込先（口座情報）は書き換え前に退避する。必ず統合ビューを書き出す前に読むこと。
+  var payoutSnap = loadPayoutSnapshot_(ss);
   var formCustomers = readFormCustomers_();
   var affili        = readAffiliCustomers_();
   var affiliCustomers = affili.customers;
@@ -686,8 +744,8 @@ function rebuildIntegratedCustomers() {
     matchingRows.push([a.rawName, a.sales, caseCount, linkedId, linkedName, state, candidate]);
   });
 
-  // 統合ビュー: 案件を1案件＝1列で横展開
-  var headers = INTEGRATED_PROFILE_HEADERS.concat(caseNames).concat(['アフィリンク顧客名', '状態']);
+  // 統合ビュー: 案件を1案件＝1列で横展開。振込先6列は「持ち家かどうか」の直後に固定。
+  var headers = INTEGRATED_PROFILE_HEADERS.concat(PAYOUT_HEADERS).concat(caseNames).concat(['アフィリンク顧客名', '状態']);
   var caseCells = function(caseStatus) {
     return caseNames.map(function(cn) { return caseStatus[cn] || ''; });
   };
@@ -704,6 +762,7 @@ function rebuildIntegratedCustomers() {
     integratedRows.push(
       [c.id, c.raw['名前'], c.raw['会社名・屋号'], c.raw['営業担当'], c.raw['年齢'], c.raw['職業'],
        c.raw['おみくじ'], c.raw['ニーズ'], c.raw['趣味'], c.raw['MBTI'], c.raw['持ち家かどうか']]
+      .concat(payoutFor_(payoutSnap, c.id, c.raw['名前']))
       .concat(cells)
       .concat([a ? a.rawName : '', (a && Object.keys(a.caseStatus).length) ? '統合済' : 'フォームのみ'])
     );
@@ -715,17 +774,22 @@ function rebuildIntegratedCustomers() {
     caseMatrix.push(cells);
     integratedRows.push(
       ['', a.rawName, '', a.sales, '', '', '', '', '', '', '']
+      .concat(payoutFor_(payoutSnap, '', a.rawName))
       .concat(cells)
       .concat([a.rawName, 'アフィリンクのみ'])
     );
   });
 
   writeIntegratedSheet_(ss, MATCHING_SHEET_NAME, MATCHING_HEADERS, matchingRows, '#7c3aed');
-  var intSheet = writeIntegratedSheet_(ss, INTEGRATED_SHEET_NAME, headers, integratedRows, '#4a86e8');
+  var payoutStartCol = INTEGRATED_PROFILE_HEADERS.length + 1;
+  var intSheet = writeIntegratedSheet_(ss, INTEGRATED_SHEET_NAME, headers, integratedRows, '#4a86e8', function(sheet) {
+    // 口座番号・ゆうちょ店番の先頭ゼロ落ちを防ぐため、値を入れる前にテキスト書式へ戻す
+    sheet.getRange(1, payoutStartCol, sheet.getMaxRows(), PAYOUT_HEADERS.length).setNumberFormat('@');
+  });
 
   // 案件セルをステータスで色分け＋名前列を固定（横スクロールでも顧客が分かるように）
   if (caseNames.length && caseMatrix.length) {
-    colorCaseCells_(intSheet, 2, INTEGRATED_PROFILE_HEADERS.length + 1, caseMatrix);
+    colorCaseCells_(intSheet, 2, payoutStartCol + PAYOUT_HEADERS.length, caseMatrix);
   }
   intSheet.setFrozenColumns(2);
 
