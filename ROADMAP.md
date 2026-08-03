@@ -2,6 +2,8 @@
 
 ## Current
 
+- **2026-08-03: Web App が 403 になる障害が発生し、同日復旧した。** 原因はオーナー（shinhogle@gmail.com）ではない編集者アカウント（3s3.cube@gmail.com）で既存 Web App を再デプロイしたこと。`executeAs: USER_DEPLOYING` のため実行ユーザーが編集者側へ移り、その account が本 script のスコープを承認していないため匿名アクセスが全て 403 になった。version 20 へ戻しただけでは実行ユーザーが戻らず復旧しない。復旧手順はオーナー account の clasp 認証で同じ deployment を version 20 へ再デプロイすること（コード変更なし）。復旧後 `getCustomers` は 190件・ID重複0で HTTP 200。
+- **未デプロイの差分あり**: `main.js` に `getSalesStaff` アクション（2行）。remote HEAD には入っているが、本番 deployment は version 20 に固定してあるため配信されていない。取り扱いは DECISIONS.md 2026-08-03 を参照。
 - 顧客選択を「顧客名で検索」方式に刷新（2026-07-26）。GAS は version 20 に再デプロイ（URL維持）、GitHub Pages も更新済み。本番の140件で検索・選択・フォーム流し込みまで確認済み。
 
 - 営業担当フルネーム統一はGAS本番反映・既存データ変換・GitHub Pages反映まで完了。
@@ -27,10 +29,12 @@
 
 ## Blockers
 
-- なし。
+- なし（2026-08-03 の Web App 403 障害は同日中に復旧済み。下記「2026-08-03」の項を参照）。
 
 ## Backlog
 
+- **`getCustomers` が無認証で顧客190件の氏名・会社名・担当営業を返している**（`ANYONE_ANONYMOUS`。`index.html` のパスワードはクライアント側のみでAPIを保護していない）。共有シークレット必須化などの対策を検討する。
+- 誤操作で残った deployment `AKfycbyhMFGNmQ4g…`(@22) の削除（version 22 の要否判断後）。
 - `自己採点` の集計・可視化（営業別平均など）。
 - 名寄せの自動マッチ精度向上（電話番号など追加キーでの照合）。
 - `main.js` 等のコードを Git 追跡化（現状未追跡）。

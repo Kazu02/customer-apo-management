@@ -84,3 +84,27 @@
   - 列: `ノムコム` が1列増（アフィリンク側の新案件を取り込んだもの）。消えた列は0。振込先は12列目のまま。
   - 行: 283→334行。53件が新規に取り込まれ、`西江幸子`・`青山 恵美子` の2件は**消えたのではなく「アフィリンクのみ」→「統合済」へ統合**された（名寄せが顧客ID 150 / 143 と自動一致。`青山 恵美子`→`青山恵美子` の空白ゆれも吸収）。
   - 所要 5.7秒。**前回の再構築からかなり間が空いていたため、この1回で53件と1案件列がまとめて反映された**点に注意（不具合ではなく、更新をためていたぶんが一度に出たもの）。
+
+## 2026-08-03: オーナー以外のアカウントで再デプロイして Web App が全面403になった
+
+- Problem: 公開Web App（`AKfycbxqy6u9…`）が匿名アクセスで HTTP 403「アクセスが拒否されました」を返し、GitHub Pages のフォームが顧客一覧を取得できなくなった。version 20 へ戻しても復旧しなかった。
+- Cause: このscriptのオーナーは `shinhogle@gmail.com` だが、編集者権限を持つ `3s3.cube@gmail.com` の clasp 認証で再デプロイした。`appsscript.json` は `executeAs: USER_DEPLOYING` / `access: ANYONE_ANONYMOUS` なので、**再デプロイした瞬間に実行ユーザーが編集者側へ移る**。その account は本scriptのOAuthスコープを承認していないため、匿名リクエストが全て403になる。
+- 誤解しやすい点: **バージョンを戻しても直らない。** 403の原因はコードではなく deployment の実行ユーザーであり、`clasp redeploy` を誰が実行したかで決まる。ロールバックだけを試すと「戻したのに直らない」に見える。
+- Fix: オーナー account の clasp 認証に切り替えてから、**同じ deployment ID を同じ version 20 へ再デプロイする**（コード変更なし）。これで実行ユーザーがオーナーへ戻り復旧する。ブラウザでApps Scriptを開き直す必要はなかった。
+  ```
+  cp ~/.clasprc.shinhogle.json ~/.clasprc.json
+  clasp show-authorized-user   # shinhogle@gmail.com であることを必ず確認
+  clasp redeploy AKfycbxqy6u9… -V 20 -d "顧客名検索対応（顧客一覧に company/name/staff を追加）"
+  ```
+- 検証: `?action=getCustomers` が HTTP 200 / `application/json`、190件・ID重複0・ID範囲1〜190、`company`/`name`/`staff` の欠落0。`getCustomer&id=1` は15フィールド。最終応答に `Access-Control-Allow-Origin: *` があり GitHub Pages からのfetchも通る。フロント（`kazu02.github.io/customer-apo-management`）は200で、参照先GAS URLは復旧した deployment と一致。
+- 予防: **このプロジェクトのデプロイ前に必ず `clasp show-authorized-user` を実行し、`shinhogle@gmail.com` を目視確認する。** 編集者権限があるだけの account でも `clasp push` / `redeploy` は成功してしまい、失敗ではなく本番停止として現れる。
+- 残置物: 誤操作時に作られた deployment `AKfycbyhMFGNmQ4g…`(@22) が残っており403のまま。本番URLとは別物で参照されていないため無害だが、version 22 の要否を判断したあとに削除する。
+
+## 2026-08-03: getSalesStaff（営業名簿API）は未配信のまま保留
+
+- 変更: `doGet` に `action=getSalesStaff` → `SALES_STAFF.slice()` を返す分岐（2行）。remote HEAD と version 22 には入っているが、**本番 deployment は version 20 のままなので配信されていない**（`?action=getSalesStaff` は `{"error":"unknown action"}` を返す）。
+- コードとしての評価: 問題なし。`.slice()` で元配列を保護しており、既存の分岐順序・ES5スタイルとも整合している。
+- 保留の理由: この Web App は `ANYONE_ANONYMOUS` で、URLを知っていれば誰でも無認証で叩ける。`getSalesStaff` は営業10名の氏名を無認証で公開することになる。
+  - ただし公開範囲の悪化は限定的で、**`getCustomers` が既に顧客190件の氏名・会社名・担当営業を無認証で返している**。名簿10名中4名の氏名はそこから既に読める。真の問題は `getSalesStaff` ではなく `getCustomers` の無認証公開のほう（`index.html` のパスワードはクライアント側のみでAPIを守っていない）。
+  - 一方で得られる利益が小さい。顧客向け公式LINE側が実際に詰まっているのは**氏名ではなく営業のログイン用Googleアカウントとの対応**であり、氏名だけのAPIでは解決しない。氏名10件は `main.js` / `index.html` / `PROJECT_CONTEXT.md` に既にあるので、API化しなくても参照できる。
+- Decision: 公開範囲を広げるだけの利益が無いため、**現時点では version 20 のまま据え置く**。名簿APIが本当に必要になったら共有シークレット必須にしてから配信する。あわせて `getCustomers` の無認証公開は別課題として `Backlog` に積む。

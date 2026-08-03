@@ -56,6 +56,8 @@ function doGet(e) {
 
   if (action === 'getCustomers') {
     result = getCustomerListData();
+  } else if (action === 'getSalesStaff') {
+    result = SALES_STAFF.slice();
   } else if (action === 'getCustomer') {
     result = getCustomerData(Number(e.parameter.id));
   } else {
