@@ -134,3 +134,16 @@
 - 作業方式: 一時的な鍵付き保守アクションを `main.js` に追加 → 使い捨てデプロイから実行 → コード削除・`clasp push`・`undeploy`。実行後に remote HEAD == コミット済みローカル、デプロイ5件（元の構成）、残トリガーは `sendDailySummary` と `onFormSubmit` のみ、`MAINT_*` プロパティ0件を確認済み。
 - 注意（Windows）: `git checkout` で復元した `main.js` は CRLF になるため、`\n` 前提の文字列置換が無言で失敗する。パッチ生成時は改行コードを検出してから置換すること。
 - 残: `総合_須川一輝` シートはヘッダーのみで残置。退任者のシートなので不要なら削除してよい（生成元は `SALES_STAFF` 外なので再生成されない）。`統合顧客管理` / `名寄せ` は次回の再構築で自動的に整合する。
+
+## 2026-08-04（同日・撤回）: リンク共有を元どおり復元した
+
+- 上の「リンク共有を完全解除」はユーザー判断で**撤回**し、同日中に元の状態へ戻した。
+- 復元後: `株式会社市場作り_ALL` に `anyoneWithLink` / `type=anyone` / `role=writer` / `allowFileDiscovery=false`。配下も再帰確認して未反映0件。**解除前と同一の状態**（`allowFileDiscovery=false` なので検索には出ず、リンクを知っている人だけ）。
+- 復元の手順（解除と同じ経路）: GAS から `ScriptApp.getOAuthToken()` で
+  `POST /drive/v3/files/<folderId>/permissions` に `{role:'writer', type:'anyone', allowFileDiscovery:false}` を投げる。HTTP 200 で `id: anyoneWithLink` が返る。
+  **`allowFileDiscovery` を省略・true にすると「リンクを知っている全員」ではなく「一般公開・検索可能」になってしまう**ので必ず false を明示する。
+- したがって **`getCustomers` の無認証公開だけでなく、Drive側のリンク共有（誰でも編集可）も現存する**。この状態が事故の再発経路であることは変わらないので、対策する場合の選択肢を残しておく:
+  1. 編集者→閲覧者へ降格（編集・再デプロイは防げる。閲覧は維持）
+  2. リンク共有をやめて必要な人だけ個別共有
+  3. 現状維持（今ここ）
+- 運用上の注意は変わらない: **このプロジェクトへデプロイする前に必ず `clasp show-authorized-user` でオーナー（shinhogle@gmail.com）を目視確認する。** リンク共有が編集者のままである以上、誤アカウントでの再デプロイは今後も起こりうる。
