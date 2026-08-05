@@ -4,8 +4,8 @@
 
 - Project: フォーム顧客管理
 - Organization: 市場作り
-- Workspace path: C:\Users\shinh\OneDrive\デスクトップ\AI\プロジェクト\市場作り\フォーム顧客管理
-- GAS / Google アカウント: shinhogle@gmail.com（3s3.cube@gmail.com と混同しないこと）
+- Workspace path: C:\Users\shinh\Desktop\AI\プロジェクト\市場作り\フォーム顧客管理
+- GAS / Google アカウント: s***e@gmail.com（3***e@gmail.com と混同しないこと）
 
 ## Purpose
 
@@ -13,7 +13,7 @@
 
 ## Users And Stakeholders
 
-- 運用・管理者: shinhogle@gmail.com
+- 運用・管理者: s***e@gmail.com
 - 営業担当（フォーム入力者。アフィリンク紹介者と同じフルネーム表記で統一）
 - 通知先: アポ管理 LINE グループ
 
@@ -33,7 +33,7 @@
 - clasp 管理（`.clasp.json` の scriptId）。clasp 3.x。
 - デプロイ（バックエンド）: `clasp push` → `clasp redeploy <deploymentId>`（既存 Web App URL を維持）。
 - デプロイ（フロント）: `index.html` を GitHub（`Kazu02/customer-apo-management`）へ push → GitHub Pages 反映。
-- GAS アカウントは必ず shinhogle@gmail.com。`clasp logout` → `clasp login` で確認（executeAs: USER_DEPLOYING のため誤アカウント厳禁）。
+- GAS アカウントは必ず s***e@gmail.com。`clasp logout` → `clasp login` で確認（executeAs: USER_DEPLOYING のため誤アカウント厳禁）。
 - LINE 通知: ScriptProperties `LINE_CHANNEL_TOKEN` / `APO_LINE_GROUP_ID`。
 - 日次集計: `sendDailySummary`（毎朝9時トリガー）。
 - アフィリンク統合: 当 GAS が Drive 名 `顧客管理_アフィリエイト` の SS を取得して読み取り、名前正規化で名寄せ。手動修正は `名寄せ` シートの「紐づけ顧客ID（編集可）」で行う。

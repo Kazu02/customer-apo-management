@@ -21,7 +21,7 @@
 
 ## 2026-06-15: GAS アカウントとデプロイ経路
 
-- Decision: GAS は必ず shinhogle@gmail.com で操作・デプロイする。バックエンドは `clasp push`→`clasp redeploy <deploymentId>`（URL維持）、フロント `index.html` は GitHub（Kazu02/customer-apo-management）へ push して GitHub Pages 反映。
+- Decision: GAS は必ず s***e@gmail.com で操作・デプロイする。バックエンドは `clasp push`→`clasp redeploy <deploymentId>`（URL維持）、フロント `index.html` は GitHub（Kazu02/customer-apo-management）へ push して GitHub Pages 反映。
 - Reason: `executeAs: USER_DEPLOYING` のため、誤アカウント（3s3.cube）でデプロイすると Web アプリが誤アカウントとして実行され、対象スプレッドシート/Drive にアクセスできず本番が壊れる。
 - Consequence: デプロイ前に `clasp show-authorized-user` で shinhogle を確認する。
 
@@ -88,16 +88,16 @@
 ## 2026-08-03: オーナー以外のアカウントで再デプロイして Web App が全面403になった
 
 - Problem: 公開Web App（`AKfycbxqy6u9…`）が匿名アクセスで HTTP 403「アクセスが拒否されました」を返し、GitHub Pages のフォームが顧客一覧を取得できなくなった。version 20 へ戻しても復旧しなかった。
-- Cause: このscriptのオーナーは `shinhogle@gmail.com` だが、編集者権限を持つ `3s3.cube@gmail.com` の clasp 認証で再デプロイした。`appsscript.json` は `executeAs: USER_DEPLOYING` / `access: ANYONE_ANONYMOUS` なので、**再デプロイした瞬間に実行ユーザーが編集者側へ移る**。その account は本scriptのOAuthスコープを承認していないため、匿名リクエストが全て403になる。
+- Cause: このscriptのオーナーは `s***e@gmail.com` だが、編集者権限を持つ `3***e@gmail.com` の clasp 認証で再デプロイした。`appsscript.json` は `executeAs: USER_DEPLOYING` / `access: ANYONE_ANONYMOUS` なので、**再デプロイした瞬間に実行ユーザーが編集者側へ移る**。その account は本scriptのOAuthスコープを承認していないため、匿名リクエストが全て403になる。
 - 誤解しやすい点: **バージョンを戻しても直らない。** 403の原因はコードではなく deployment の実行ユーザーであり、`clasp redeploy` を誰が実行したかで決まる。ロールバックだけを試すと「戻したのに直らない」に見える。
 - Fix: オーナー account の clasp 認証に切り替えてから、**同じ deployment ID を同じ version 20 へ再デプロイする**（コード変更なし）。これで実行ユーザーがオーナーへ戻り復旧する。ブラウザでApps Scriptを開き直す必要はなかった。
   ```
   cp ~/.clasprc.shinhogle.json ~/.clasprc.json
-  clasp show-authorized-user   # shinhogle@gmail.com であることを必ず確認
+  clasp show-authorized-user   # s***e@gmail.com であることを必ず確認
   clasp redeploy AKfycbxqy6u9… -V 20 -d "顧客名検索対応（顧客一覧に company/name/staff を追加）"
   ```
 - 検証: `?action=getCustomers` が HTTP 200 / `application/json`、190件・ID重複0・ID範囲1〜190、`company`/`name`/`staff` の欠落0。`getCustomer&id=1` は15フィールド。最終応答に `Access-Control-Allow-Origin: *` があり GitHub Pages からのfetchも通る。フロント（`kazu02.github.io/customer-apo-management`）は200で、参照先GAS URLは復旧した deployment と一致。
-- 予防: **このプロジェクトのデプロイ前に必ず `clasp show-authorized-user` を実行し、`shinhogle@gmail.com` を目視確認する。** 編集者権限があるだけの account でも `clasp push` / `redeploy` は成功してしまい、失敗ではなく本番停止として現れる。
+- 予防: **このプロジェクトのデプロイ前に必ず `clasp show-authorized-user` を実行し、`s***e@gmail.com` を目視確認する。** 編集者権限があるだけの account でも `clasp push` / `redeploy` は成功してしまい、失敗ではなく本番停止として現れる。
 - 残置物: 誤操作時に作られた deployment `AKfycbyhMFGNmQ4g…`(@22) が残っており403のまま。本番URLとは別物で参照されていないため無害だが、version 22 の要否を判断したあとに削除する。
 
 ## 2026-08-03: getSalesStaff（営業名簿API）は未配信のまま保留
@@ -111,7 +111,7 @@
 
 ## 2026-08-04: 3s3.cube の権限剥奪＝実体はフォルダのリンク共有（誰でも編集可）の解除だった
 
-- 発端: 「3s3.cube@gmail.com の権限を完全に外す」。ところが **script にもスプレッドシートにも 3s3.cube 個別の権限は存在しなかった**。
+- 発端: 「3***e@gmail.com の権限を完全に外す」。ところが **script にもスプレッドシートにも 3s3.cube 個別の権限は存在しなかった**。
 - 実体: 親フォルダ **`株式会社市場作り_ALL`**（`1rcbtalp_X9pCceHBIS1HmePOBMYp6AwY`・マイドライブ直下）が **「リンクを知っている全員 = 編集者」** で共有されており、配下すべてが継承していた。3s3.cube はこの公開リンク経由で編集者だった。
 - 公開されていた範囲: `株式会社市場作り`（顧客・アポ・**振込先の口座情報**）、`アフィリエイト管理`、`エージェントビジネス`、Apps Script 2本（`アフィリエイトフォーム`/`エージェント`）、`代理店スプシ`、`自社アフィリ分`、`P2P`、`アフィリエイトサンクスページ`、`アフィリエイト_スクショ`（実名入りの個人スクショ約50点）。**配下に個別共有は1件も無く、外部アクセスは全てこのリンク1本に依存していた。**
 - Decision: ユーザー判断で **リンク共有を完全に解除**（オーナーのみ）。2026-08-04 実施、配下を再帰確認して公開残0件。
@@ -146,4 +146,4 @@
   1. 編集者→閲覧者へ降格（編集・再デプロイは防げる。閲覧は維持）
   2. リンク共有をやめて必要な人だけ個別共有
   3. 現状維持（今ここ）
-- 運用上の注意は変わらない: **このプロジェクトへデプロイする前に必ず `clasp show-authorized-user` でオーナー（shinhogle@gmail.com）を目視確認する。** リンク共有が編集者のままである以上、誤アカウントでの再デプロイは今後も起こりうる。
+- 運用上の注意は変わらない: **このプロジェクトへデプロイする前に必ず `clasp show-authorized-user` でオーナー（s***e@gmail.com）を目視確認する。** リンク共有が編集者のままである以上、誤アカウントでの再デプロイは今後も起こりうる。
