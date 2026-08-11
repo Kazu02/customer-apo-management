@@ -56,8 +56,6 @@ function doGet(e) {
 
   if (action === 'getCustomers') {
     result = getCustomerListData();
-  } else if (action === 'getSalesStaff') {
-    result = SALES_STAFF.slice();
   } else if (action === 'getCustomer') {
     result = getCustomerData(Number(e.parameter.id));
   } else {
@@ -151,11 +149,28 @@ function getCustomerData(id) {
 }
 
 // ===== 顧客情報シートに書き込む（新規） =====
+// 次の顧客IDを「既存IDの最大 + 1」で決める。
+// 行数（getLastRow）から採番すると、行を削除したときに既存IDを再利用して重複する。
+// 実際に 2026-08-05、ダミー3件の削除でID 189/190/191 が別人同士で重複した。
+// 顧客IDは他シート（アポ報告のラベル、名寄せの紐づけ顧客ID）から参照されるため、
+// 欠番が出ても再利用しない。
+function nextCustomerId_(sheet) {
+  var last = sheet.getLastRow();
+  if (last < 2) return 1;
+  var vals = sheet.getRange(2, 1, last - 1, 1).getValues();
+  var max = 0;
+  for (var i = 0; i < vals.length; i++) {
+    var n = Number(vals[i][0]);
+    if (!isNaN(n) && n > max) max = n;
+  }
+  return max + 1;
+}
+
 function registerCustomer(v) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = getOrCreateSheet(ss, CUSTOMER_SHEET_NAME, CUSTOMER_HEADERS);
 
-  var newId = sheet.getLastRow();
+  var newId = nextCustomerId_(sheet);
   var row = [
     newId,
     v['タイムスタンプ'] || new Date(),
