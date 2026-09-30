@@ -1,7 +1,6 @@
 // ===== 設定 =====
 var CUSTOMER_SHEET_NAME = '顧客情報';
 var APO_SHEET_NAME = 'アポ報告';
-var LINE_PUSH_API_URL = 'https://api.line.me/v2/bot/message/push';
 
 var CUSTOMER_HEADERS = [
   'ID', 'タイムスタンプ', '営業担当', '会社名・屋号', '名前',
@@ -80,8 +79,8 @@ function doPost(e) {
       registerApo(data);
       result = { success: true, id: newId };
       try {
-        notifyApoGroup(buildCustomerMessage(data, newId));
-        notifyApoGroup(buildApoMessage(data, true));
+        // 登録とアポ報告は1回の push に2つの吹き出しで送る（通数はグループ人数 × push 回数）
+        sendLineGroup_([buildCustomerMessage(data, newId), buildApoMessage(data, true)]);
       } catch (lineErr) { Logger.log('LINE通知エラー: ' + lineErr); }
     } else {
       updateCustomerById(data);
@@ -289,21 +288,9 @@ function testCustomer() {
 
 // ===== LINE通知 =====
 
+// 届かなかった本文（月間送信数の上限など）はシート「LINE送信待ち」に残り、後で送られる（line-outbox.js）。
 function notifyApoGroup(text) {
-  var props   = PropertiesService.getScriptProperties();
-  var token   = props.getProperty('LINE_CHANNEL_TOKEN');
-  var groupId = props.getProperty('APO_LINE_GROUP_ID');
-  if (!token || !groupId) return;
-  var msg = text.length > 4990 ? text.substring(0, 4990) + '...' : text;
-  UrlFetchApp.fetch(LINE_PUSH_API_URL, {
-    method: 'post',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + token
-    },
-    payload: JSON.stringify({ to: groupId, messages: [{ type: 'text', text: msg }] }),
-    muteHttpExceptions: true
-  });
+  return sendLineGroup_([text]);
 }
 
 function buildCustomerMessage(data, newId) {
@@ -363,6 +350,10 @@ function sendDailySummary() {
       lines.push('・' + s + ': ' + apoCounts[s] + '件');
     });
   }
+
+  // 公式LINEの送信数が今月の8割を超えたときだけ添える（同じ吹き出しなので通数は増えない）
+  var quotaSection = lineQuotaReportSection_(false);
+  if (quotaSection) lines.push('\n' + quotaSection);
 
   notifyApoGroup(lines.join('\n'));
 }
