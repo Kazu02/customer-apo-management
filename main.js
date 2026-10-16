@@ -49,14 +49,86 @@ function normalizePayloadSalesStaff_(data) {
 
 // ===== Web App エンドポイント =====
 
+// 参照系 API の認可（2026-10-16 追加）
+//  - Vercel（サーバー側）: ?key=<Script Properties の API_KEY>。全件一覧・全列の取得ができる。
+//  - GitHub Pages の営業フォーム（鍵を持てない）: ?action=searchCustomers&q=<名前の一部>（候補のみ）と、
+//    候補で選んだ顧客の ?action=getCustomer&id=<ID>&name=<候補の名前>（ID と名前が一致したときだけ全項目）。
+//  - Script Properties REQUIRE_API_KEY が '1' になるまでは、従来の無認証 getCustomers / getCustomer も動く（移行期間）。
+//    '1' にした瞬間から、鍵なしの全件一覧と、名前なしの ID 指定取得は拒否される。戻すときは '0' か削除。
+var PUBLIC_SEARCH_MIN_CHARS = 2;
+var PUBLIC_SEARCH_MAX_RESULTS = 20;
+
+function hasValidApiKey_(provided) {
+  var key = PropertiesService.getScriptProperties().getProperty('API_KEY');
+  return !!key && !!provided && String(provided) === key;
+}
+
+function isApiKeyRequired_() {
+  return PropertiesService.getScriptProperties().getProperty('REQUIRE_API_KEY') === '1';
+}
+
+// 名前の部分一致用の正規化（全角英数→半角・ひらがな→カタカナ・空白記号除去・小文字化）。index.html の csNormalize と同じ。
+function normalizeSearchText_(value) {
+  var s = String(value === null || value === undefined ? '' : value);
+  s = s.replace(/[Ａ-Ｚａ-ｚ０-９]/g, function(ch) { return String.fromCharCode(ch.charCodeAt(0) - 0xFEE0); });
+  s = s.replace(/[ぁ-ゖ]/g, function(ch) { return String.fromCharCode(ch.charCodeAt(0) + 0x60); });
+  s = s.replace(/[\s　・,、.。\-ー－―‐_\/／]/g, '');
+  return s.toLowerCase();
+}
+
+// 営業フォーム用の最小応答: 名前の部分一致で候補だけ（id / 表示名 / 会社名 / 名前 / 担当）。住所・生年月日・備考などは返さない。
+function searchCustomersMinimal_(q) {
+  var needle = normalizeSearchText_(q);
+  if (needle.length < PUBLIC_SEARCH_MIN_CHARS) {
+    return { ok: true, minChars: PUBLIC_SEARCH_MIN_CHARS, results: [] };
+  }
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(CUSTOMER_SHEET_NAME);
+  var out = [];
+  var total = 0;
+  if (sheet && sheet.getLastRow() >= 2) {
+    var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 5).getValues();
+    rows.forEach(function(row) {
+      if (row[0] === '') return;
+      var name = row[4] === null || row[4] === undefined ? '' : String(row[4]).trim();
+      if (normalizeSearchText_(name).indexOf(needle) < 0) return;
+      total++;
+      if (out.length >= PUBLIC_SEARCH_MAX_RESULTS) return;
+      var company = row[3] === null || row[3] === undefined ? '' : String(row[3]).trim();
+      out.push({
+        id: row[0],
+        label: row[0] + ' - ' + company + ' - ' + name,
+        company: company,
+        name: name,
+        staff: normalizeSalesStaff_(row[2])
+      });
+    });
+  }
+  return { ok: true, minChars: PUBLIC_SEARCH_MIN_CHARS, total: total, results: out };
+}
+
 function doGet(e) {
   var action = e.parameter.action || '';
   var result;
+  var keyOk = hasValidApiKey_(e.parameter.key);
+  var strict = isApiKeyRequired_();
 
-  if (action === 'getCustomers') {
-    result = getCustomerListData();
+  if (action === 'searchCustomers') {
+    result = searchCustomersMinimal_(e.parameter.q);
+  } else if (action === 'getCustomers') {
+    result = (keyOk || !strict) ? getCustomerListData() : { error: 'forbidden' };
   } else if (action === 'getCustomer') {
-    result = getCustomerData(Number(e.parameter.id));
+    var id = Number(e.parameter.id);
+    var claimedName = e.parameter.name === undefined ? null : String(e.parameter.name).trim();
+    if (keyOk || !strict) {
+      result = getCustomerData(id);
+    } else if (claimedName) {
+      // 営業フォーム: 候補で見えている名前と ID が一致する顧客だけ返す。
+      var found = getCustomerData(id);
+      result = (found && String(found['名前'] || '').trim() === claimedName) ? found : null;
+    } else {
+      result = { error: 'forbidden' };
+    }
   } else {
     result = { error: 'unknown action' };
   }

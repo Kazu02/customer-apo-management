@@ -715,21 +715,81 @@
     status.style.display = 'block';
     box.classList.remove('ready');
 
-    fetch(GAS_URL + '?action=getCustomers')
+    function showReady() {
+      status.style.display = 'none';
+      box.classList.add('ready');
+      renderCustomerResults();
+    }
+    function showLoadError() {
+      status.className = 'error-text';
+      status.textContent = '読み込みに失敗しました。GAS URLを確認してください。';
+      status.style.display = 'block';
+    }
+
+    // 新方式: 全件一覧は取らず、名前の一部を入力したときだけ候補を問い合わせる（searchCustomers）。
+    // 旧GAS（searchCustomers が無い版）は {error:'unknown action'} を返すので、そのときだけ従来の全件一覧に戻る（新旧両対応）。
+    fetch(GAS_URL + '?action=searchCustomers&q=')
       .then(function(r) { return r.json(); })
-      .then(function(data) {
-        customers = (data || []).map(prepareCustomer);
-        status.style.display = 'none';
-        box.classList.add('ready');
-        document.getElementById('customerSearchInput').placeholder =
-          '顧客名で検索（全' + customers.length + '件）';
-        renderCustomerResults();
+      .then(function(probe) {
+        if (probe && probe.ok === true) {
+          searchMode = true;
+          customers = [];
+          if (probe.minChars) SEARCH_MIN_CHARS = probe.minChars;
+          document.getElementById('customerSearchInput').placeholder =
+            '顧客名の一部を入力して検索（' + SEARCH_MIN_CHARS + '文字以上）';
+          showReady();
+          return;
+        }
+        return fetch(GAS_URL + '?action=getCustomers')
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (!Array.isArray(data)) throw new Error('list denied');
+            customers = data.map(prepareCustomer);
+            document.getElementById('customerSearchInput').placeholder =
+              '顧客名で検索（全' + customers.length + '件）';
+            showReady();
+          });
       })
-      .catch(function() {
-        status.className = 'error-text';
-        status.textContent = '読み込みに失敗しました。GAS URLを確認してください。';
-        status.style.display = 'block';
-      });
+      .catch(showLoadError);
+  }
+
+  // ========== 候補の問い合わせ（新方式・名前の部分一致のみ） ==========
+  var searchMode = false;
+  var SEARCH_MIN_CHARS = 2;
+  var searchSeq = 0;
+  var searchTimer = null;
+  var searchState = '';      // '' | 'short' | 'loading' | 'error'
+
+  function runRemoteSearch() {
+    var query = document.getElementById('customerSearchInput').value;
+    var normalized = csNormalize(query);
+    clearTimeout(searchTimer);
+    if (normalized.length < SEARCH_MIN_CHARS) {
+      searchSeq++;
+      customers = [];
+      searchState = 'short';
+      renderCustomerResults();
+      return;
+    }
+    searchState = 'loading';
+    renderCustomerResults();
+    var seq = ++searchSeq;
+    searchTimer = setTimeout(function() {
+      fetch(GAS_URL + '?action=searchCustomers&q=' + encodeURIComponent(query))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (seq !== searchSeq) return;     // 古い応答は捨てる
+          customers = ((data && data.results) || []).map(prepareCustomer);
+          searchState = '';
+          renderCustomerResults();
+        })
+        .catch(function() {
+          if (seq !== searchSeq) return;
+          customers = [];
+          searchState = 'error';
+          renderCustomerResults();
+        });
+    }, 300);
   }
 
   // ========== 顧客検索（名前・会社名・ID） ==========
@@ -781,6 +841,7 @@
   function csSearch(query) {
     var tokens = csTokens(query).map(csNormalize).filter(function(t) { return t !== ''; });
     if (!tokens.length) return customers.slice();
+    if (searchMode) return customers.slice();   // 新方式: 絞り込みはGAS側で済んでいる
 
     var hits = [];
     customers.forEach(function(c) {
@@ -851,6 +912,10 @@
     if (!input || !box) return;
 
     var query = input.value;
+    if (searchMode && csNormalize(query).length < SEARCH_MIN_CHARS) {
+      customers = [];
+      searchState = 'short';
+    }
     var tokens = csTokens(query);
     var matches = csSearch(query);
     var shown = matches.slice(0, CS_MAX_RESULTS);
@@ -865,7 +930,13 @@
       + '<div class="cs-item-sub">一覧から選ばず、新しい顧客として登録します</div>'
       + '</div>';
 
-    if (!shown.length) {
+    if (searchMode && searchState === 'short') {
+      html += '<div class="cs-empty">顧客名を' + SEARCH_MIN_CHARS + '文字以上入力すると候補が出ます</div>';
+    } else if (searchMode && searchState === 'loading') {
+      html += '<div class="cs-empty">検索中...</div>';
+    } else if (searchMode && searchState === 'error') {
+      html += '<div class="cs-empty">検索に失敗しました。もう一度入力してください</div>';
+    } else if (!shown.length) {
       html += '<div class="cs-empty">「' + escapeHtml(query) + '」に一致する顧客は見つかりませんでした</div>';
     } else {
       shown.forEach(function(c, i) {
@@ -945,10 +1016,12 @@
     closeCustomerResults();
     renderCustomerResults();
 
-    fetch(GAS_URL + '?action=getCustomer&id=' + encodeURIComponent(c.id))
+    // 新方式では「候補で見えていた名前」と一致するときだけ全項目が返る。旧GASは name を無視して従来どおり返す。
+    fetch(GAS_URL + '?action=getCustomer&id=' + encodeURIComponent(c.id) + '&name=' + encodeURIComponent(c.name || ''))
       .then(function(r) { return r.json(); })
       .then(function(data) {
-        if (data) fillCustomerForm(data);
+        if (data && !data.error) fillCustomerForm(data);
+        else alert('顧客データの取得に失敗しました');
       })
       .catch(function() {
         alert('顧客データの取得に失敗しました');
@@ -976,12 +1049,12 @@
 
     input.addEventListener('input', function() {
       clearBtn.classList.toggle('show', input.value !== '');
-      renderCustomerResults();
+      if (searchMode) runRemoteSearch(); else renderCustomerResults();
       openCustomerResults();
     });
 
     input.addEventListener('focus', function() {
-      renderCustomerResults();
+      if (searchMode) runRemoteSearch(); else renderCustomerResults();
       openCustomerResults();
     });
 
