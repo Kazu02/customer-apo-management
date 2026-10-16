@@ -51,7 +51,7 @@ function normalizePayloadSalesStaff_(data) {
 
 // 参照系 API の認可（2026-10-16 追加）
 //  - Vercel（サーバー側）: ?key=<Script Properties の API_KEY>。全件一覧・全列の取得ができる。
-//  - GitHub Pages の営業フォーム（鍵を持てない）: ?action=searchCustomers&q=<名前の一部>（候補のみ）と、
+//  - GitHub Pages の営業フォーム（鍵を持てない）: ?action=searchCustomers&q=<名前・会社名などの一部>（候補のみ）と、
 //    候補で選んだ顧客の ?action=getCustomer&id=<ID>&name=<候補の名前>（ID と名前が一致したときだけ全項目）。
 //  - Script Properties REQUIRE_API_KEY が '1' になるまでは、従来の無認証 getCustomers / getCustomer も動く（移行期間）。
 //    '1' にした瞬間から、鍵なしの全件一覧と、名前なしの ID 指定取得は拒否される。戻すときは '0' か削除。
@@ -76,7 +76,7 @@ function normalizeSearchText_(value) {
   return s.toLowerCase();
 }
 
-// 営業フォーム用の最小応答: 名前の部分一致で候補だけ（id / 表示名 / 会社名 / 名前 / 担当）。住所・生年月日・備考などは返さない。
+// 営業フォーム用の最小応答: 名前・会社名の部分一致と顧客ID・担当の前方一致で候補だけ（id / 表示名 / 会社名 / 名前 / 担当）。住所・生年月日・備考などは返さない。
 function searchCustomersMinimal_(q) {
   var needle = normalizeSearchText_(q);
   if (needle.length < PUBLIC_SEARCH_MIN_CHARS) {
@@ -91,10 +91,15 @@ function searchCustomersMinimal_(q) {
     rows.forEach(function(row) {
       if (row[0] === '') return;
       var name = row[4] === null || row[4] === undefined ? '' : String(row[4]).trim();
-      if (normalizeSearchText_(name).indexOf(needle) < 0) return;
+      var company = row[3] === null || row[3] === undefined ? '' : String(row[3]).trim();
+      // 旧フォームと同じく、名前・会社名・顧客ID・担当のどれかに当たれば候補にする。
+      var hit = normalizeSearchText_(name).indexOf(needle) >= 0 ||
+        normalizeSearchText_(company).indexOf(needle) >= 0 ||
+        normalizeSearchText_(row[0]).indexOf(needle) === 0 ||
+        normalizeSearchText_(normalizeSalesStaff_(row[2])).indexOf(needle) === 0;
+      if (!hit) return;
       total++;
       if (out.length >= PUBLIC_SEARCH_MAX_RESULTS) return;
-      var company = row[3] === null || row[3] === undefined ? '' : String(row[3]).trim();
       out.push({
         id: row[0],
         label: row[0] + ' - ' + company + ' - ' + name,
